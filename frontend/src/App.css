@@ -354,8 +354,15 @@ label {
   margin: 0;
 }
 
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+
 .inline-label {
-  min-width: 220px;
+  min-width: 180px;
 }
 
 .table-wrap {
