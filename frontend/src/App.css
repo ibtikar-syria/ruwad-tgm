@@ -403,6 +403,29 @@ th {
   font-size: 1.1rem;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+button.secondary {
+  background: #2b3b4c;
+  color: var(--text);
+}
+
+button.danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(227, 93, 106, 0.45);
+}
+
+.webhook-status {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 800px) {
   .groups-layout {
     grid-template-columns: 1fr;

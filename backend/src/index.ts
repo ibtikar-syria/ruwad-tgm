@@ -18,7 +18,7 @@ app.use(
     origin: (origin) => origin || '*',
     credentials: true,
     allowHeaders: ['Content-Type'],
-    allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
 )
 

@@ -67,14 +67,7 @@ npm run deploy
 
 ### Set Telegram webhook
 
-After the Worker is publicly reachable (deploy or a tunnel such as Cloudflare Tunnel / ngrok):
-
-```bash
-curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
-  -d "url=https://<your-worker>/telegram/webhook" \
-  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
-  -d "allowed_updates=[\"message\",\"edited_message\",\"message_reaction\",\"my_chat_member\"]"
-```
+After the Worker is publicly reachable (deploy or a tunnel such as Cloudflare Tunnel / ngrok), open **Settings** in the admin UI and use **Telegram webhook** → **Set webhook**. Paste the public Worker URL (or accept the suggested `…/telegram/webhook`). The app calls Telegram `setWebhook` with `TELEGRAM_WEBHOOK_SECRET` and the required update types.
 
 Add the bot to a group. For reaction updates, give the bot permission to see messages (disable privacy mode via BotFather `/setprivacy` → Disable, or make the bot a group admin).
 

@@ -7,6 +7,12 @@ import type {
   MemberRow,
   SettingRow,
 } from '../types'
+import {
+  ALLOWED_UPDATES,
+  deleteWebhook,
+  getWebhookInfo,
+  setWebhook,
+} from '../telegram/api'
 
 export const apiRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: AppVariables }>()
 
@@ -263,4 +269,85 @@ apiRoutes.patch('/settings', async (c) => {
     settings[row.key] = row.value
   }
   return c.json({ settings })
+})
+
+apiRoutes.get('/telegram/webhook', async (c) => {
+  if (!c.env.TELEGRAM_BOT_TOKEN) {
+    return c.json({ error: 'TELEGRAM_BOT_TOKEN is not configured' }, 500)
+  }
+
+  const info = await getWebhookInfo(c.env.TELEGRAM_BOT_TOKEN)
+  if (!info.ok) {
+    return c.json(
+      { error: info.description ?? 'Failed to fetch webhook info' },
+      502,
+    )
+  }
+
+  const origin = new URL(c.req.url).origin
+  return c.json({
+    webhook: info.result,
+    suggested_url: `${origin}/telegram/webhook`,
+    allowed_updates: [...ALLOWED_UPDATES],
+  })
+})
+
+apiRoutes.post('/telegram/webhook', async (c) => {
+  if (!c.env.TELEGRAM_BOT_TOKEN) {
+    return c.json({ error: 'TELEGRAM_BOT_TOKEN is not configured' }, 500)
+  }
+  if (!c.env.TELEGRAM_WEBHOOK_SECRET) {
+    return c.json({ error: 'TELEGRAM_WEBHOOK_SECRET is not configured' }, 500)
+  }
+
+  let body: { url?: string } = {}
+  try {
+    body = await c.req.json()
+  } catch {
+    body = {}
+  }
+
+  const origin = new URL(c.req.url).origin
+  const raw = (body.url?.trim() || `${origin}/telegram/webhook`).replace(/\/$/, '')
+  const webhookUrl = raw.endsWith('/telegram/webhook') ? raw : `${raw}/telegram/webhook`
+
+  if (!webhookUrl.startsWith('https://')) {
+    return c.json({ error: 'Webhook URL must use HTTPS' }, 400)
+  }
+
+  const result = await setWebhook(
+    c.env.TELEGRAM_BOT_TOKEN,
+    webhookUrl,
+    c.env.TELEGRAM_WEBHOOK_SECRET,
+  )
+
+  if (!result.ok) {
+    return c.json(
+      { error: result.description ?? 'Failed to set webhook' },
+      502,
+    )
+  }
+
+  const info = await getWebhookInfo(c.env.TELEGRAM_BOT_TOKEN)
+  return c.json({
+    ok: true,
+    url: webhookUrl,
+    webhook: info.ok ? info.result : null,
+  })
+})
+
+apiRoutes.delete('/telegram/webhook', async (c) => {
+  if (!c.env.TELEGRAM_BOT_TOKEN) {
+    return c.json({ error: 'TELEGRAM_BOT_TOKEN is not configured' }, 500)
+  }
+
+  const result = await deleteWebhook(c.env.TELEGRAM_BOT_TOKEN)
+  if (!result.ok) {
+    return c.json(
+      { error: result.description ?? 'Failed to delete webhook' },
+      502,
+    )
+  }
+
+  return c.json({ ok: true })
 })

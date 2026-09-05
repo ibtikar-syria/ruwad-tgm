@@ -106,4 +106,33 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ settings }),
     }),
+  webhookInfo: () =>
+    request<{
+      webhook: {
+        url: string
+        pending_update_count: number
+        last_error_date?: number
+        last_error_message?: string
+        allowed_updates?: string[]
+      }
+      suggested_url: string
+      allowed_updates: string[]
+    }>('/api/telegram/webhook'),
+  setWebhook: (url?: string) =>
+    request<{
+      ok: boolean
+      url: string
+      webhook: {
+        url: string
+        pending_update_count: number
+        last_error_date?: number
+        last_error_message?: string
+        allowed_updates?: string[]
+      } | null
+    }>('/api/telegram/webhook', {
+      method: 'POST',
+      body: JSON.stringify(url ? { url } : {}),
+    }),
+  deleteWebhook: () =>
+    request<{ ok: boolean }>('/api/telegram/webhook', { method: 'DELETE' }),
 }
