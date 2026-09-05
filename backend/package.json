@@ -4,12 +4,17 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:migrate:local": "wrangler d1 migrations apply telegram-messages --local && wrangler d1 migrations apply main-database --local",
+    "db:migrate:remote": "wrangler d1 migrations apply telegram-messages --remote && wrangler d1 migrations apply main-database --remote",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "hono": "^4.13.7"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260905.1",
+    "typescript": "^7.0.2",
     "wrangler": "^4.110.0"
   }
 }

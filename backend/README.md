@@ -1,21 +1,11 @@
-```txt
+# Backend (Cloudflare Worker)
+
+Hono API + Telegram webhook. See the [root README](../README.md) for full setup.
+
+```bash
+cp .dev.vars.example .dev.vars
 npm install
+npx wrangler d1 migrations apply telegram-messages --local
+npx wrangler d1 migrations apply main-database --local
 npm run dev
-```
-
-```txt
-npm run deploy
-```
-
-[For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
-
-```txt
-npm run cf-typegen
-```
-
-Pass the `CloudflareBindings` as generics when instantiating `Hono`:
-
-```ts
-// src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
 ```
