@@ -7,6 +7,8 @@ import {
   upsertMember,
 } from '../db/members'
 import type { CloudflareBindings } from '../types'
+import { sendMessage } from './api'
+import { formatInfoMessageHtml, isInfoCommand } from './info'
 import type {
   TelegramMessage,
   TelegramMessageReactionUpdated,
@@ -17,6 +19,22 @@ function isGroupChat(type: string): boolean {
   return type === 'group' || type === 'supergroup'
 }
 
+async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage): Promise<void> {
+  if (!env.TELEGRAM_BOT_TOKEN) return
+  const result = await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    chat_id: message.chat.id,
+    text: formatInfoMessageHtml(message),
+    parse_mode: 'HTML',
+    reply_to_message_id: message.message_id,
+    ...(typeof message.message_thread_id === 'number'
+      ? { message_thread_id: message.message_thread_id }
+      : {}),
+  })
+  if (!result.ok) {
+    console.error('Failed to reply with /info', result.description)
+  }
+}
+
 async function handleMessage(
   env: CloudflareBindings,
   message: TelegramMessage,
@@ -24,6 +42,7 @@ async function handleMessage(
 ): Promise<void> {
   const chat = message.chat
   const chatId = String(chat.id)
+  const shouldReplyInfo = countStats && isInfoCommand(message.text)
 
   if (chat.type === 'private') {
     if (!message.from) return
@@ -42,6 +61,10 @@ async function handleMessage(
         chatId,
       )
       .run()
+
+    if (shouldReplyInfo) {
+      await replyWithInfo(env, message)
+    }
     return
   }
 
@@ -83,6 +106,10 @@ async function handleMessage(
       messages: 1,
       replies: message.reply_to_message ? 1 : 0,
     })
+  }
+
+  if (shouldReplyInfo) {
+    await replyWithInfo(env, message)
   }
 }
 

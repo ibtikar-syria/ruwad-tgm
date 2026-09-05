@@ -60,4 +60,17 @@ export async function deleteWebhook(botToken: string): Promise<TelegramApiRespon
   })
 }
 
+export async function sendMessage(
+  botToken: string,
+  params: {
+    chat_id: number | string
+    text: string
+    parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2'
+    reply_to_message_id?: number
+    message_thread_id?: number
+  },
+): Promise<TelegramApiResponse<unknown>> {
+  return callTelegramApi(botToken, 'sendMessage', params)
+}
+
 export { ALLOWED_UPDATES }
