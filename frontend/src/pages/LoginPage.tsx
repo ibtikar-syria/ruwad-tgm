@@ -30,7 +30,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       await api.login(secret)
-      navigate('/groups', { replace: true })
+      navigate('/chats', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -42,7 +42,7 @@ export function LoginPage() {
     return <div className="page-center muted">Loading…</div>
   }
   if (alreadyAuth) {
-    return <Navigate to="/groups" replace />
+    return <Navigate to="/chats" replace />
   }
 
   return (

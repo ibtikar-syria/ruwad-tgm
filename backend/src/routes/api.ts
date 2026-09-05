@@ -95,6 +95,7 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
         username: member?.username ?? null,
         membership_id: member?.membership_id ?? null,
         reply_to: replyTo,
+        message_json: m.message_json,
       }
     }),
   })

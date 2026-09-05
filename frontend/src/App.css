@@ -302,6 +302,85 @@ label {
   font-size: 0.75rem;
 }
 
+.msg-info-btn {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid #4a5d70;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+}
+
+.msg-info-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.json-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(4, 10, 16, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.json-modal {
+  width: min(720px, 100%);
+  max-height: min(80vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid #243344;
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.json-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #243344;
+}
+
+.json-modal-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.json-modal-meta {
+  margin: 0.65rem 1rem 0;
+  font-size: 0.85rem;
+}
+
+.json-modal-body {
+  margin: 0.75rem 1rem 1rem;
+  padding: 0.85rem;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  background: #0b121a;
+  border: 1px solid #1c2834;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .badge {
   font-size: 0.7rem;
   padding: 0.1rem 0.4rem;

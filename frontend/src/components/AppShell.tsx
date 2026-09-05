@@ -45,7 +45,7 @@ export function AppShell() {
       <header className="topnav">
         <div className="brand">Group Manager</div>
         <nav>
-          <NavLink to="/groups">Groups</NavLink>
+          <NavLink to="/chats">Chats</NavLink>
           <NavLink to="/analytics">Analytics</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>

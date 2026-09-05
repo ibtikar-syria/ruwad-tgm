@@ -18,6 +18,7 @@ export type ChatMessage = {
   username: string | null
   membership_id: string | null
   reply_to: { message_id?: number; text?: string } | null
+  message_json: string
 }
 
 export type Member = {
