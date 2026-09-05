@@ -52,15 +52,15 @@ jobs:
       - name: Deploy to Cloudflare Workers
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler.local.jsonc --name group-manager-backend-dev
+        run: wrangler deploy --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
 
       - name: Set secrets in Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "${{ secrets.TELEGRAM_BOT_TOKEN }}" | wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.local.jsonc --name group-manager-backend-dev
-          echo "${{ secrets.TELEGRAM_WEBHOOK_SECRET }}" | wrangler secret put TELEGRAM_WEBHOOK_SECRET --config wrangler.local.jsonc --name group-manager-backend-dev
-          echo "${{ secrets.ADMIN_SECRET }}" | wrangler secret put ADMIN_SECRET --config wrangler.local.jsonc --name group-manager-backend-dev
+          echo "${{ secrets.TELEGRAM_BOT_TOKEN }}" | wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
+          echo "${{ secrets.TELEGRAM_WEBHOOK_SECRET }}" | wrangler secret put TELEGRAM_WEBHOOK_SECRET --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
+          echo "${{ secrets.ADMIN_SECRET }}" | wrangler secret put ADMIN_SECRET --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
 
       - name: Migrate D1 Databases
         env:
