@@ -13,18 +13,61 @@ export async function upsertGroup(
 ): Promise<void> {
   const chatId = String(chat.id)
   const now = new Date().toISOString()
+  const isForum = chat.is_forum ? 1 : 0
   await db
     .prepare(
-      `INSERT INTO groups (chat_id, title, username, is_active, added_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO groups (chat_id, title, username, is_forum, is_active, added_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(chat_id) DO UPDATE SET
          title = excluded.title,
          username = excluded.username,
+         is_forum = CASE
+           WHEN excluded.is_forum = 1 THEN 1
+           ELSE groups.is_forum
+         END,
          is_active = excluded.is_active,
          updated_at = excluded.updated_at`,
     )
-    .bind(chatId, chat.title ?? null, chat.username ?? null, isActive ? 1 : 0, now, now)
+    .bind(chatId, chat.title ?? null, chat.username ?? null, isForum, isActive ? 1 : 0, now, now)
     .run()
+}
+
+export async function upsertTopic(
+  db: D1Database,
+  chatId: string,
+  messageThreadId: string,
+  opts?: { title?: string | null; isGeneral?: boolean; markForum?: boolean },
+): Promise<void> {
+  const now = new Date().toISOString()
+  const isGeneral = opts?.isGeneral || messageThreadId === '1' ? 1 : 0
+  const title =
+    opts?.title?.trim() ||
+    (isGeneral ? 'General' : null)
+
+  await db
+    .prepare(
+      `INSERT INTO topics (chat_id, message_thread_id, title, is_general, is_active, first_seen_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?)
+       ON CONFLICT(chat_id, message_thread_id) DO UPDATE SET
+         title = CASE
+           WHEN excluded.title IS NOT NULL AND excluded.title != '' THEN excluded.title
+           ELSE topics.title
+         END,
+         is_general = MAX(topics.is_general, excluded.is_general),
+         is_active = 1,
+         updated_at = excluded.updated_at`,
+    )
+    .bind(chatId, messageThreadId, title, isGeneral, now, now)
+    .run()
+
+  if (opts?.markForum) {
+    await db
+      .prepare(
+        `UPDATE groups SET is_forum = 1, updated_at = ? WHERE chat_id = ?`,
+      )
+      .bind(now, chatId)
+      .run()
+  }
 }
 
 export async function upsertMember(

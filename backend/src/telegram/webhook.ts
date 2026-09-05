@@ -5,6 +5,7 @@ import {
   upsertGroup,
   upsertGroupMember,
   upsertMember,
+  upsertTopic,
 } from '../db/members'
 import type { CloudflareBindings } from '../types'
 import { sendMessage } from './api'
@@ -17,6 +18,29 @@ import type {
 
 function isGroupChat(type: string): boolean {
   return type === 'group' || type === 'supergroup'
+}
+
+async function syncTopicFromMessage(
+  env: CloudflareBindings,
+  message: TelegramMessage,
+): Promise<void> {
+  const chatId = String(message.chat.id)
+  const threadId =
+    message.message_thread_id != null ? String(message.message_thread_id) : null
+  if (!threadId) return
+
+  let title: string | null = null
+  if (message.forum_topic_created?.name) {
+    title = message.forum_topic_created.name
+  } else if (message.forum_topic_edited?.name) {
+    title = message.forum_topic_edited.name
+  }
+
+  await upsertTopic(env.MAIN_DB, chatId, threadId, {
+    title,
+    isGeneral: threadId === '1',
+    markForum: true,
+  })
 }
 
 async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage): Promise<void> {
@@ -68,9 +92,25 @@ async function handleMessage(
     return
   }
 
-  if (!isGroupChat(chat.type) || !message.from || message.from.is_bot) return
+  if (!isGroupChat(chat.type)) return
 
   await upsertGroup(env.MAIN_DB, chat, true)
+  await syncTopicFromMessage(env, message)
+
+  // Topic service messages may lack a normal user; still store topic metadata above
+  const isServiceTopicEvent = Boolean(
+    message.forum_topic_created ||
+      message.forum_topic_edited ||
+      message.forum_topic_closed ||
+      message.forum_topic_reopened ||
+      message.general_forum_topic_hidden ||
+      message.general_forum_topic_unhidden,
+  )
+
+  if (!message.from || message.from.is_bot) {
+    return
+  }
+
   const member = await upsertMember(env.MAIN_DB, message.from)
   await upsertGroupMember(env.MAIN_DB, chatId, member.telegram_user_id)
 
@@ -101,7 +141,8 @@ async function handleMessage(
     )
     .run()
 
-  if (countStats && !existing) {
+  // Don't count pure topic-admin service messages toward interaction stats
+  if (countStats && !existing && !isServiceTopicEvent) {
     await incrementStats(env.MAIN_DB, chatId, member.telegram_user_id, {
       messages: 1,
       replies: message.reply_to_message ? 1 : 0,

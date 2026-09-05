@@ -14,8 +14,19 @@ export type GroupRow = {
   chat_id: string
   title: string | null
   username: string | null
+  is_forum: number
   is_active: number
   added_at: string
+  updated_at: string
+}
+
+export type TopicRow = {
+  chat_id: string
+  message_thread_id: string
+  title: string | null
+  is_general: number
+  is_active: number
+  first_seen_at: string
   updated_at: string
 }
 

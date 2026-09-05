@@ -1,10 +1,22 @@
+export type Topic = {
+  chat_id: string
+  message_thread_id: string
+  title: string | null
+  is_general: number
+  is_active: number
+  first_seen_at: string
+  updated_at: string
+}
+
 export type Group = {
   chat_id: string
   title: string | null
   username: string | null
+  is_forum: number
   is_active: number
   added_at: string
   updated_at: string
+  topics: Topic[]
 }
 
 export type ChatMessage = {
@@ -80,10 +92,14 @@ export const api = {
   logout: () =>
     request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   groups: () => request<{ groups: Group[] }>('/api/groups'),
-  messages: (chatId: string, opts?: { before?: string; limit?: number }) => {
+  messages: (
+    chatId: string,
+    opts?: { before?: string; limit?: number; threadId?: string | null },
+  ) => {
     const params = new URLSearchParams()
     if (opts?.before) params.set('before', opts.before)
     if (opts?.limit) params.set('limit', String(opts.limit))
+    if (opts?.threadId) params.set('thread_id', opts.threadId)
     const qs = params.toString()
     return request<{ messages: ChatMessage[] }>(
       `/api/groups/${encodeURIComponent(chatId)}/messages${qs ? `?${qs}` : ''}`,

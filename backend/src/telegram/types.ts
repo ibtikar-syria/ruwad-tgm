@@ -11,6 +11,7 @@ export type TelegramChat = {
   type: 'private' | 'group' | 'supergroup' | 'channel'
   title?: string
   username?: string
+  is_forum?: boolean
 }
 
 export type TelegramMessage = {
@@ -22,6 +23,13 @@ export type TelegramMessage = {
   caption?: string
   message_thread_id?: number
   reply_to_message?: TelegramMessage
+  is_topic_message?: boolean
+  forum_topic_created?: { name: string; icon_color?: number; icon_custom_emoji_id?: string }
+  forum_topic_edited?: { name?: string; icon_custom_emoji_id?: string }
+  forum_topic_closed?: Record<string, never>
+  forum_topic_reopened?: Record<string, never>
+  general_forum_topic_hidden?: Record<string, never>
+  general_forum_topic_unhidden?: Record<string, never>
 }
 
 export type TelegramReactionType = {

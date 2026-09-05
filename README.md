@@ -111,6 +111,6 @@ Worker names: `group-manager-backend(-dev)`, `group-manager-frontend(-dev)`.
 
 ## Features
 
-- **Chats** — Telegram-like list + message thread (read-only; info button shows stored message JSON)
+- **Chats** — Telegram-like list with forum topics nested under groups; message thread (read-only; info button shows stored message JSON)
 - **Analytics** — per member: messages, replies, reactions (all groups or one group)
 - **Settings** — assign `membership_id` manually; optional display name setting

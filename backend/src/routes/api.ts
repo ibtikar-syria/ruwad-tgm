@@ -6,6 +6,7 @@ import type {
   GroupRow,
   MemberRow,
   SettingRow,
+  TopicRow,
 } from '../types'
 import {
   ALLOWED_UPDATES,
@@ -13,26 +14,106 @@ import {
   getWebhookInfo,
   setWebhook,
 } from '../telegram/api'
+import { upsertTopic } from '../db/members'
 
 export const apiRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: AppVariables }>()
 
 apiRoutes.get('/groups', async (c) => {
+  // Backfill topics from stored messages so forum threads aren't a flat message dump
+  const threads = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT DISTINCT chat_id, message_thread_id
+     FROM all_messages_groups
+     WHERE message_thread_id IS NOT NULL AND message_thread_id != ''`,
+  ).all<{ chat_id: string; message_thread_id: string }>()
+
+  const titleRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT chat_id, message_thread_id, message_json
+     FROM all_messages_groups
+     WHERE message_json LIKE '%forum_topic_created%'
+        OR message_json LIKE '%forum_topic_edited%'`,
+  ).all<{ chat_id: string; message_thread_id: string; message_json: string }>()
+
+  const titleByKey = new Map<string, string>()
+  for (const row of titleRows.results ?? []) {
+    if (!row.message_thread_id) continue
+    try {
+      const parsed = JSON.parse(row.message_json) as {
+        forum_topic_created?: { name?: string }
+        forum_topic_edited?: { name?: string }
+      }
+      const name =
+        parsed.forum_topic_created?.name ?? parsed.forum_topic_edited?.name
+      if (name) {
+        titleByKey.set(`${row.chat_id}:${row.message_thread_id}`, name)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  for (const row of threads.results ?? []) {
+    await upsertTopic(c.env.MAIN_DB, row.chat_id, row.message_thread_id, {
+      title: titleByKey.get(`${row.chat_id}:${row.message_thread_id}`) ?? null,
+      isGeneral: row.message_thread_id === '1',
+      markForum: true,
+    })
+  }
+
   const rows = await c.env.MAIN_DB.prepare(
-    `SELECT chat_id, title, username, is_active, added_at, updated_at
+    `SELECT chat_id, title, username, is_forum, is_active, added_at, updated_at
      FROM groups
      ORDER BY updated_at DESC`,
   ).all<GroupRow>()
 
-  return c.json({ groups: rows.results ?? [] })
+  const topicRows = await c.env.MAIN_DB.prepare(
+    `SELECT chat_id, message_thread_id, title, is_general, is_active, first_seen_at, updated_at
+     FROM topics
+     WHERE is_active = 1
+     ORDER BY is_general DESC, title COLLATE NOCASE ASC, message_thread_id ASC`,
+  ).all<TopicRow>()
+
+  const topicsByChat = new Map<string, TopicRow[]>()
+  for (const topic of topicRows.results ?? []) {
+    const list = topicsByChat.get(topic.chat_id) ?? []
+    list.push(topic)
+    topicsByChat.set(topic.chat_id, list)
+  }
+
+  return c.json({
+    groups: (rows.results ?? []).map((g) => ({
+      ...g,
+      is_forum: g.is_forum ? 1 : 0,
+      topics: topicsByChat.get(g.chat_id) ?? [],
+    })),
+  })
 })
 
 apiRoutes.get('/groups/:chatId/messages', async (c) => {
   const chatId = c.req.param('chatId')
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200)
   const before = c.req.query('before')
+  const threadId = c.req.query('thread_id')
 
   let query: D1PreparedStatement
-  if (before) {
+  if (threadId != null && threadId !== '') {
+    if (before) {
+      query = c.env.TELEGRAM_MESSAGES_DB.prepare(
+        `SELECT id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at
+         FROM all_messages_groups
+         WHERE chat_id = ? AND message_thread_id = ? AND created_at < ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      ).bind(chatId, threadId, before, limit)
+    } else {
+      query = c.env.TELEGRAM_MESSAGES_DB.prepare(
+        `SELECT id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at
+         FROM all_messages_groups
+         WHERE chat_id = ? AND message_thread_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      ).bind(chatId, threadId, limit)
+    }
+  } else if (before) {
     query = c.env.TELEGRAM_MESSAGES_DB.prepare(
       `SELECT id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at
        FROM all_messages_groups
