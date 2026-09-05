@@ -90,6 +90,32 @@ UI at `http://127.0.0.1:5173`. Vite proxies `/api` to the Worker on port 8787.
 
 Log in with the same value as `ADMIN_SECRET`.
 
+## GitHub Actions (Cloudflare deploy)
+
+Workflows under `.github/workflows/` deploy on `dev` / `main` (same flow as before, wired to this app).
+
+Configure **Environments** `dev` and `main` with:
+
+### Variables
+
+| Variable | Used by |
+|----------|---------|
+| `CLOUDFLARE_ACCOUNT_ID` | backend, db |
+| `TELEGRAM_MESSAGES_DB_ID` / `TELEGRAM_MESSAGES_DB_NAME` | backend, db (D1 binding 0) |
+| `MAIN_DB_ID` / `MAIN_DB_NAME` | backend, db (D1 binding 1) |
+| `VITE_API_BASE_URL` | frontend build (backend Worker URL, no trailing slash) |
+
+### Secrets
+
+| Secret | Used by |
+|--------|---------|
+| `CLOUDFLARE_API_TOKEN` | all deploy/migrate jobs |
+| `TELEGRAM_BOT_TOKEN` | backend |
+| `TELEGRAM_WEBHOOK_SECRET` | backend |
+| `ADMIN_SECRET` | backend |
+
+Worker names: `group-manager-backend(-dev)`, `group-manager-frontend(-dev)`.
+
 ## Features
 
 - **Groups** — Telegram-like list + message thread (read-only)

@@ -43,8 +43,10 @@ export type AnalyticsRow = {
   reactions_count: number
 }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
