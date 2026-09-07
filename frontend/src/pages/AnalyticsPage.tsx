@@ -62,8 +62,15 @@ export function AnalyticsPage() {
 
   return (
     <div className="section-page">
+      <header className="page-header">
+        <div>
+          <h1>Analytics</h1>
+          <p className="page-subtitle">
+            Message, reply, and reaction counts by member. Export the current scope to a spreadsheet.
+          </p>
+        </div>
+      </header>
       <div className="section-toolbar">
-        <h1>Analytics</h1>
         <div className="toolbar-actions">
           <label className="inline-label">
             Group
