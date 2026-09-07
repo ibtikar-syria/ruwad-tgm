@@ -6,6 +6,7 @@ export function SettingsPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [appName, setAppName] = useState('')
+  const [pollViaBot, setPollViaBot] = useState(false)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookStatus, setWebhookStatus] = useState<{
     url: string
@@ -40,6 +41,8 @@ export function SettingsPage() {
       }
       setDrafts(next)
       setAppName(settingsRes.settings.app_name ?? '')
+      const pv = (settingsRes.settings.poll_via_bot ?? '').trim().toLowerCase()
+      setPollViaBot(pv === '1' || pv === 'true' || pv === 'yes' || pv === 'on')
       await loadWebhook()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings')
@@ -73,8 +76,20 @@ export function SettingsPage() {
     setMessage(null)
     setError(null)
     try {
-      await api.updateSettings({ app_name: appName })
-      setMessage('Settings saved.')
+      const res = await api.updateSettings({
+        app_name: appName,
+        poll_via_bot: pollViaBot ? 'true' : 'false',
+      })
+      let msg = 'Settings saved.'
+      if (pollViaBot && res.webhook_refreshed) {
+        msg += ' Webhook refreshed so poll votes can be tracked.'
+      } else if (pollViaBot && res.webhook_error) {
+        msg += ` Warning: could not refresh webhook (${res.webhook_error}). Use Set webhook below.`
+      } else if (pollViaBot && !webhookStatus?.url) {
+        msg += ' Set the Telegram webhook below so poll answers are received.'
+      }
+      setMessage(msg)
+      if (res.webhook_refreshed) await loadWebhook()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
     }
@@ -144,6 +159,20 @@ export function SettingsPage() {
               Display name
               <input value={appName} onChange={(e) => setAppName(e.target.value)} />
             </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={pollViaBot}
+                onChange={(e) => setPollViaBot(e.target.checked)}
+              />
+              <span>Poll via Bot</span>
+            </label>
+            <p className="muted">
+              When enabled, any poll posted by a member is deleted and re-sent by the bot as a
+              public (non-anonymous) poll so individual votes can be tracked. The bot must be a
+              group admin with <strong>Delete messages</strong> permission. Saving while enabled
+              also refreshes the webhook to include <code>poll_answer</code>.
+            </p>
             <button type="submit">Save settings</button>
           </form>
 

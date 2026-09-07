@@ -716,6 +716,34 @@ apiRoutes.patch('/settings', async (c) => {
     await c.env.MAIN_DB.batch(stmts)
   }
 
+  // Enabling Poll via Bot needs poll_answer on the webhook — re-register if URL is set
+  let webhookRefreshed: boolean | undefined
+  let webhookError: string | undefined
+  const pollViaBot = body.settings.poll_via_bot
+  const enablingPollViaBot =
+    pollViaBot != null &&
+    ['1', 'true', 'yes', 'on'].includes(String(pollViaBot).trim().toLowerCase())
+
+  if (
+    enablingPollViaBot &&
+    c.env.TELEGRAM_BOT_TOKEN &&
+    c.env.TELEGRAM_WEBHOOK_SECRET
+  ) {
+    const info = await getWebhookInfo(c.env.TELEGRAM_BOT_TOKEN)
+    const existingUrl = info.ok ? info.result?.url?.trim() : ''
+    if (existingUrl) {
+      const refreshed = await setWebhook(
+        c.env.TELEGRAM_BOT_TOKEN,
+        existingUrl,
+        c.env.TELEGRAM_WEBHOOK_SECRET,
+      )
+      webhookRefreshed = refreshed.ok
+      if (!refreshed.ok) {
+        webhookError = refreshed.description ?? 'Failed to refresh webhook'
+      }
+    }
+  }
+
   const rows = await c.env.MAIN_DB.prepare(
     `SELECT key, value, updated_at FROM settings`,
   ).all<SettingRow>()
@@ -723,7 +751,7 @@ apiRoutes.patch('/settings', async (c) => {
   for (const row of rows.results ?? []) {
     settings[row.key] = row.value
   }
-  return c.json({ settings })
+  return c.json({ settings, webhook_refreshed: webhookRefreshed, webhook_error: webhookError })
 })
 
 apiRoutes.get('/telegram/webhook', async (c) => {

@@ -81,6 +81,18 @@ label {
   font-size: 0.9rem;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.checkbox-row input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+
 .muted {
   color: var(--muted);
 }

@@ -14,7 +14,8 @@ import {
   upsertPollVote,
 } from '../db/polls'
 import type { CloudflareBindings } from '../types'
-import { sendMessage, sendPoll } from './api'
+import { deleteMessage, sendMessage, sendPoll } from './api'
+import { isPollViaBotEnabled } from '../db/settings'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
 import { isPollCommand, parsePollCommand } from './pollCommand'
 import { extractTopicTitle } from './topicTitle'
@@ -24,6 +25,7 @@ import type {
   TelegramPoll,
   TelegramPollAnswer,
   TelegramUpdate,
+  TelegramUser,
 } from './types'
 
 function isGroupChat(type: string): boolean {
@@ -119,6 +121,88 @@ async function handlePollCommand(
         : {}),
     })
   }
+}
+
+function senderLabel(user?: TelegramUser): string {
+  if (!user) return 'someone'
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ')
+  if (user.username) return `${name || user.username} (@${user.username})`
+  return name || String(user.id)
+}
+
+/**
+ * Delete a user-sent poll and re-send it as a bot poll (public) so poll_answer works.
+ * Returns true if the original was deleted and a bot poll was sent (or delete succeeded
+ * and we should not store the original).
+ */
+async function reclaimUserPollAsBotPoll(
+  env: CloudflareBindings,
+  message: TelegramMessage,
+): Promise<'reclaimed' | 'failed_keep' | 'skipped'> {
+  if (!message.poll || !env.TELEGRAM_BOT_TOKEN) return 'skipped'
+  if (!message.from || message.from.is_bot) return 'skipped'
+  if (!(await isPollViaBotEnabled(env))) return 'skipped'
+
+  const poll = message.poll
+  const options = poll.options.map((o) => o.text).filter(Boolean)
+  if (options.length < 2) return 'skipped'
+
+  const del = await deleteMessage(
+    env.TELEGRAM_BOT_TOKEN,
+    message.chat.id,
+    message.message_id,
+  )
+
+  if (!del.ok) {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chat_id: message.chat.id,
+      text:
+        'Poll via Bot is enabled, but I could not delete this poll. Make me a group admin with <b>Delete messages</b> permission.',
+      parse_mode: 'HTML',
+      reply_to_message_id: message.message_id,
+      ...(typeof message.message_thread_id === 'number'
+        ? { message_thread_id: message.message_thread_id }
+        : {}),
+    })
+    return 'failed_keep'
+  }
+
+  const sent = await sendPoll(env.TELEGRAM_BOT_TOKEN, {
+    chat_id: message.chat.id,
+    question: poll.question,
+    options,
+    // Always public so we receive poll_answer and can export voters
+    is_anonymous: false,
+    allows_multiple_answers: poll.allows_multiple_answers,
+    ...(typeof message.message_thread_id === 'number'
+      ? { message_thread_id: message.message_thread_id }
+      : {}),
+  })
+
+  if (!sent.ok) {
+    console.error('Failed to repost poll via bot', sent.description)
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chat_id: message.chat.id,
+      text: `Deleted the poll from ${senderLabel(message.from)} but failed to repost it: ${sent.description ?? 'unknown error'}`,
+      ...(typeof message.message_thread_id === 'number'
+        ? { message_thread_id: message.message_thread_id }
+        : {}),
+    })
+    return 'reclaimed'
+  }
+
+  await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    chat_id: message.chat.id,
+    text: `Poll from ${senderLabel(message.from)} was reposted by the bot so votes can be tracked.`,
+    ...(typeof message.message_thread_id === 'number'
+      ? { message_thread_id: message.message_thread_id }
+      : {}),
+    ...(sent.result?.message_id
+      ? { reply_to_message_id: sent.result.message_id }
+      : {}),
+  })
+
+  return 'reclaimed'
 }
 
 async function storeGroupMessage(
@@ -240,6 +324,18 @@ async function handleMessage(
 
   // Always store polls (including ones sent by this bot) so votes can be linked
   if (message.poll) {
+    if (countStats && message.from && !message.from.is_bot) {
+      const reclaim = await reclaimUserPollAsBotPoll(env, message)
+      if (reclaim === 'reclaimed') {
+        // Original deleted; bot poll arrives as a separate update
+        if (message.from) {
+          await upsertMember(env.MAIN_DB, message.from)
+          await upsertGroupMember(env.MAIN_DB, chatId, String(message.from.id))
+        }
+        return
+      }
+      // failed_keep or skipped → store the user poll as usual
+    }
     await storeGroupMessage(env, message, { countStats, skipStats: true })
     return
   }

@@ -140,7 +140,11 @@ export const api = {
     }),
   settings: () => request<{ settings: Record<string, string> }>('/api/settings'),
   updateSettings: (settings: Record<string, string>) =>
-    request<{ settings: Record<string, string> }>('/api/settings', {
+    request<{
+      settings: Record<string, string>
+      webhook_refreshed?: boolean
+      webhook_error?: string
+    }>('/api/settings', {
       method: 'PATCH',
       body: JSON.stringify({ settings }),
     }),
