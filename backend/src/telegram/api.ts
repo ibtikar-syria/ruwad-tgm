@@ -71,7 +71,7 @@ export async function sendMessage(
     reply_to_message_id?: number
     message_thread_id?: number
   },
-): Promise<TelegramApiResponse<unknown>> {
+): Promise<TelegramApiResponse<TelegramMessageLike>> {
   return callTelegramApi(botToken, 'sendMessage', params)
 }
 
@@ -133,7 +133,12 @@ export async function deleteMessage(
 
 type TelegramMessageLike = {
   message_id: number
+  date?: number
+  from?: import('./types').TelegramUser
+  chat: import('./types').TelegramChat
+  text?: string
   message_thread_id?: number
+  reply_to_message?: { message_id: number }
   poll?: import('./types').TelegramPoll
 }
 

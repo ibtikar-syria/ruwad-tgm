@@ -110,7 +110,7 @@ async function handlePollCommand(
       : {}),
   })
 
-  if (!result.ok) {
+  if (!result.ok || !result.result) {
     console.error('Failed to send poll', result.description)
     await sendMessage(env.TELEGRAM_BOT_TOKEN, {
       chat_id: message.chat.id,
@@ -120,7 +120,14 @@ async function handlePollCommand(
         ? { message_thread_id: message.message_thread_id }
         : {}),
     })
+    return
   }
+
+  // Bots do not receive their own messages via webhook — store from the API response
+  await storeGroupMessage(env, result.result as TelegramMessage, {
+    countStats: false,
+    skipStats: true,
+  })
 }
 
 function senderLabel(user?: TelegramUser): string {
@@ -128,6 +135,45 @@ function senderLabel(user?: TelegramUser): string {
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ')
   if (user.username) return `${name || user.username} (@${user.username})`
   return name || String(user.id)
+}
+
+/** Remove a group message (and its poll rows) from our DB — e.g. after deleting it in Telegram. */
+async function removeStoredGroupMessage(
+  env: CloudflareBindings,
+  chatId: string,
+  telegramMessageId: number | string,
+): Promise<void> {
+  const messageDbId = `${chatId}:${telegramMessageId}`
+  const tgMsgId = String(telegramMessageId)
+
+  const pollRows = await env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT poll_id FROM polls
+     WHERE message_db_id = ?
+        OR (chat_id = ? AND telegram_message_id = ?)`,
+  )
+    .bind(messageDbId, chatId, tgMsgId)
+    .all<{ poll_id: string }>()
+
+  const pollIds = (pollRows.results ?? []).map((r) => r.poll_id)
+  if (pollIds.length > 0) {
+    const placeholders = pollIds.map(() => '?').join(',')
+    await env.TELEGRAM_MESSAGES_DB.prepare(
+      `DELETE FROM poll_votes WHERE poll_id IN (${placeholders})`,
+    )
+      .bind(...pollIds)
+      .run()
+    await env.TELEGRAM_MESSAGES_DB.prepare(
+      `DELETE FROM polls WHERE poll_id IN (${placeholders})`,
+    )
+      .bind(...pollIds)
+      .run()
+  }
+
+  await env.TELEGRAM_MESSAGES_DB.prepare(
+    `DELETE FROM all_messages_groups WHERE id = ?`,
+  )
+    .bind(messageDbId)
+    .run()
 }
 
 /**
@@ -147,6 +193,8 @@ async function reclaimUserPollAsBotPoll(
   const options = poll.options.map((o) => o.text).filter(Boolean)
   if (options.length < 2) return 'skipped'
 
+  const chatId = String(message.chat.id)
+
   const del = await deleteMessage(
     env.TELEGRAM_BOT_TOKEN,
     message.chat.id,
@@ -154,6 +202,13 @@ async function reclaimUserPollAsBotPoll(
   )
 
   if (!del.ok) {
+    const alreadyGone = /message to delete not found/i.test(del.description ?? '')
+    if (alreadyGone) {
+      // Likely a webhook retry after we already deleted + reposted — don't re-store the ghost poll
+      await removeStoredGroupMessage(env, chatId, message.message_id)
+      return 'reclaimed'
+    }
+
     await sendMessage(env.TELEGRAM_BOT_TOKEN, {
       chat_id: message.chat.id,
       text:
@@ -167,6 +222,9 @@ async function reclaimUserPollAsBotPoll(
     return 'failed_keep'
   }
 
+  // Drop any DB copy of the deleted user poll (bots don't get delete events)
+  await removeStoredGroupMessage(env, chatId, message.message_id)
+
   const sent = await sendPoll(env.TELEGRAM_BOT_TOKEN, {
     chat_id: message.chat.id,
     question: poll.question,
@@ -179,7 +237,7 @@ async function reclaimUserPollAsBotPoll(
       : {}),
   })
 
-  if (!sent.ok) {
+  if (!sent.ok || !sent.result) {
     console.error('Failed to repost poll via bot', sent.description)
     await sendMessage(env.TELEGRAM_BOT_TOKEN, {
       chat_id: message.chat.id,
@@ -191,16 +249,27 @@ async function reclaimUserPollAsBotPoll(
     return 'reclaimed'
   }
 
-  await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+  // Bots do not receive their own messages via webhook — store from the API response
+  await storeGroupMessage(env, sent.result as TelegramMessage, {
+    countStats: false,
+    skipStats: true,
+  })
+
+  const note = await sendMessage(env.TELEGRAM_BOT_TOKEN, {
     chat_id: message.chat.id,
     text: `Poll from ${senderLabel(message.from)} was reposted by the bot so votes can be tracked.`,
     ...(typeof message.message_thread_id === 'number'
       ? { message_thread_id: message.message_thread_id }
       : {}),
-    ...(sent.result?.message_id
-      ? { reply_to_message_id: sent.result.message_id }
-      : {}),
+    reply_to_message_id: sent.result.message_id,
   })
+
+  if (note.ok && note.result) {
+    await storeGroupMessage(env, note.result as TelegramMessage, {
+      countStats: false,
+      skipStats: true,
+    })
+  }
 
   return 'reclaimed'
 }
