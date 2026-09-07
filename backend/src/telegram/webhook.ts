@@ -6,6 +6,7 @@ import {
   upsertGroupMember,
   upsertMember,
   upsertTopic,
+  ensureGeneralTopic,
 } from '../db/members'
 import type { CloudflareBindings } from '../types'
 import { sendMessage } from './api'
@@ -21,13 +22,28 @@ function isGroupChat(type: string): boolean {
   return type === 'group' || type === 'supergroup'
 }
 
+/** Forum General topic uses thread id 1; omit often means General. */
+function resolveThreadId(message: TelegramMessage): string | null {
+  if (message.message_thread_id != null) {
+    return String(message.message_thread_id)
+  }
+  if (message.chat.is_forum) {
+    return '1'
+  }
+  return null
+}
+
 async function syncTopicFromMessage(
   env: CloudflareBindings,
   message: TelegramMessage,
 ): Promise<void> {
   const chatId = String(message.chat.id)
-  const threadId =
-    message.message_thread_id != null ? String(message.message_thread_id) : null
+
+  if (message.chat.is_forum) {
+    await ensureGeneralTopic(env.MAIN_DB, chatId)
+  }
+
+  const threadId = resolveThreadId(message)
   if (!threadId) return
 
   await upsertTopic(env.MAIN_DB, chatId, threadId, {
@@ -123,7 +139,8 @@ async function handleMessage(
      VALUES (?, ?, ?, ?, ?, ?, NULL, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        message_json = excluded.message_json,
-       message_text = excluded.message_text`,
+       message_text = excluded.message_text,
+       message_thread_id = COALESCE(excluded.message_thread_id, all_messages_groups.message_thread_id)`,
   )
     .bind(
       id,
@@ -131,7 +148,7 @@ async function handleMessage(
       message.text ?? message.caption ?? null,
       chatId,
       member.telegram_user_id,
-      message.message_thread_id != null ? String(message.message_thread_id) : null,
+      resolveThreadId(message),
     )
     .run()
 

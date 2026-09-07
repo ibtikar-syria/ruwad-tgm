@@ -14,7 +14,7 @@ import {
   getWebhookInfo,
   setWebhook,
 } from '../telegram/api'
-import { upsertTopic } from '../db/members'
+import { ensureGeneralTopic, upsertTopic } from '../db/members'
 import { extractTopicTitleFromJson } from '../telegram/topicTitle'
 
 export const apiRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: AppVariables }>()
@@ -49,6 +49,22 @@ apiRoutes.get('/groups', async (c) => {
       isGeneral: row.message_thread_id === '1',
       markForum: true,
     })
+  }
+
+  // Forum groups always include the General (main) topic, even with no messages yet
+  const forumGroups = await c.env.MAIN_DB.prepare(
+    `SELECT chat_id FROM groups WHERE is_forum = 1`,
+  ).all<{ chat_id: string }>()
+  for (const g of forumGroups.results ?? []) {
+    await ensureGeneralTopic(c.env.MAIN_DB, g.chat_id)
+  }
+
+  // Also treat any chat that already has topics as a forum and ensure General
+  const chatsWithTopics = await c.env.MAIN_DB.prepare(
+    `SELECT DISTINCT chat_id FROM topics`,
+  ).all<{ chat_id: string }>()
+  for (const g of chatsWithTopics.results ?? []) {
+    await ensureGeneralTopic(c.env.MAIN_DB, g.chat_id)
   }
 
   const rows = await c.env.MAIN_DB.prepare(
@@ -88,11 +104,17 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
 
   let query: D1PreparedStatement
   if (threadId != null && threadId !== '') {
+    // General topic (1): also include legacy rows with NULL thread id
+    const threadClause =
+      threadId === '1'
+        ? `(message_thread_id = ? OR message_thread_id IS NULL)`
+        : `message_thread_id = ?`
+
     if (before) {
       query = c.env.TELEGRAM_MESSAGES_DB.prepare(
         `SELECT id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at
          FROM all_messages_groups
-         WHERE chat_id = ? AND message_thread_id = ? AND created_at < ?
+         WHERE chat_id = ? AND ${threadClause} AND created_at < ?
          ORDER BY created_at DESC
          LIMIT ?`,
       ).bind(chatId, threadId, before, limit)
@@ -100,7 +122,7 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
       query = c.env.TELEGRAM_MESSAGES_DB.prepare(
         `SELECT id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at
          FROM all_messages_groups
-         WHERE chat_id = ? AND message_thread_id = ?
+         WHERE chat_id = ? AND ${threadClause}
          ORDER BY created_at DESC
          LIMIT ?`,
       ).bind(chatId, threadId, limit)

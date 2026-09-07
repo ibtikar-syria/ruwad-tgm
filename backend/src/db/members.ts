@@ -30,6 +30,19 @@ export async function upsertGroup(
     )
     .bind(chatId, chat.title ?? null, chat.username ?? null, isForum, isActive ? 1 : 0, now, now)
     .run()
+
+  if (isForum) {
+    await ensureGeneralTopic(db, chatId)
+  }
+}
+
+/** Telegram forum "General" topic always uses message_thread_id = 1. */
+export async function ensureGeneralTopic(db: D1Database, chatId: string): Promise<void> {
+  await upsertTopic(db, chatId, '1', {
+    title: 'General',
+    isGeneral: true,
+    markForum: true,
+  })
 }
 
 export async function upsertTopic(
@@ -51,7 +64,7 @@ export async function upsertTopic(
        ON CONFLICT(chat_id, message_thread_id) DO UPDATE SET
          title = CASE
            WHEN excluded.title IS NOT NULL AND excluded.title != '' THEN excluded.title
-           ELSE topics.title
+           ELSE COALESCE(topics.title, excluded.title)
          END,
          is_general = MAX(topics.is_general, excluded.is_general),
          is_active = 1,
@@ -67,6 +80,11 @@ export async function upsertTopic(
       )
       .bind(now, chatId)
       .run()
+  }
+
+  // Any discovered topic means this is a forum — ensure General exists too
+  if (messageThreadId !== '1') {
+    await ensureGeneralTopic(db, chatId)
   }
 }
 
