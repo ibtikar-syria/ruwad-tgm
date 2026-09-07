@@ -10,12 +10,14 @@ import type {
 } from '../types'
 import {
   ALLOWED_UPDATES,
+  deleteMessage,
   deleteWebhook,
+  forwardMessage,
   getWebhookInfo,
   setWebhook,
 } from '../telegram/api'
 import { ensureGeneralTopic, upsertTopic } from '../db/members'
-import { upsertPoll } from '../db/polls'
+import { applyPollUpdateToMessage, upsertPoll } from '../db/polls'
 import { extractTopicTitleFromJson } from '../telegram/topicTitle'
 import type { TelegramPoll } from '../telegram/types'
 
@@ -434,6 +436,149 @@ apiRoutes.get('/polls/:pollId', async (c) => {
       is_anonymous: poll.is_anonymous,
       allows_multiple_answers: poll.allows_multiple_answers,
       type: poll.type,
+      votes,
+    },
+  })
+})
+
+/**
+ * Refresh poll totals from Telegram via forwardMessage (Bot API has no getMessage).
+ * Forwards silently to the same chat, reads the poll from the response, then deletes the forward.
+ */
+apiRoutes.post('/polls/:pollId/refresh', async (c) => {
+  const pollId = c.req.param('pollId')
+  if (!c.env.TELEGRAM_BOT_TOKEN) {
+    return c.json({ error: 'TELEGRAM_BOT_TOKEN is not configured' }, 500)
+  }
+
+  const pollRow = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT poll_id, chat_id, message_db_id, telegram_message_id, poll_json
+     FROM polls WHERE poll_id = ?`,
+  )
+    .bind(pollId)
+    .first<{
+      poll_id: string
+      chat_id: string
+      message_db_id: string | null
+      telegram_message_id: string | null
+      poll_json: string
+    }>()
+
+  if (!pollRow) {
+    return c.json({ error: 'Poll not found' }, 404)
+  }
+  if (!pollRow.telegram_message_id) {
+    return c.json({ error: 'Poll is not linked to a Telegram message' }, 400)
+  }
+
+  let threadId: number | undefined
+  if (pollRow.message_db_id) {
+    const msg = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+      `SELECT message_thread_id FROM all_messages_groups WHERE id = ?`,
+    )
+      .bind(pollRow.message_db_id)
+      .first<{ message_thread_id: string | null }>()
+    if (msg?.message_thread_id) {
+      const n = Number(msg.message_thread_id)
+      if (Number.isFinite(n)) threadId = n
+    }
+  }
+
+  const forwarded = await forwardMessage(c.env.TELEGRAM_BOT_TOKEN, {
+    chat_id: pollRow.chat_id,
+    from_chat_id: pollRow.chat_id,
+    message_id: Number(pollRow.telegram_message_id),
+    message_thread_id: threadId,
+    disable_notification: true,
+  })
+
+  if (!forwarded.ok || !forwarded.result) {
+    return c.json(
+      {
+        error:
+          forwarded.description ??
+          'Could not refresh poll from Telegram (bot may lack permission to forward)',
+      },
+      502,
+    )
+  }
+
+  const freshPoll = forwarded.result.poll
+  if (!freshPoll) {
+    // Clean up even if unexpected
+    await deleteMessage(
+      c.env.TELEGRAM_BOT_TOKEN,
+      pollRow.chat_id,
+      forwarded.result.message_id,
+    )
+    return c.json({ error: 'Forwarded message did not include poll data' }, 502)
+  }
+
+  await upsertPoll(c.env.TELEGRAM_MESSAGES_DB, freshPoll, {
+    chatId: pollRow.chat_id,
+    messageDbId: pollRow.message_db_id,
+    telegramMessageId: pollRow.telegram_message_id,
+  })
+  await applyPollUpdateToMessage(c.env.TELEGRAM_MESSAGES_DB, freshPoll)
+
+  // Best-effort cleanup of the temporary forward
+  await deleteMessage(
+    c.env.TELEGRAM_BOT_TOKEN,
+    pollRow.chat_id,
+    forwarded.result.message_id,
+  )
+
+  // Reuse GET shape
+  const voteRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT user_id, option_ids, updated_at FROM poll_votes WHERE poll_id = ? ORDER BY updated_at ASC`,
+  )
+    .bind(pollId)
+    .all<{ user_id: string; option_ids: string; updated_at: string }>()
+
+  const userIds = [...new Set((voteRows.results ?? []).map((v) => v.user_id))]
+  const membersById: Record<string, MemberRow> = {}
+  if (userIds.length > 0) {
+    const placeholders = userIds.map(() => '?').join(',')
+    const members = await c.env.MAIN_DB.prepare(
+      `SELECT * FROM members WHERE telegram_user_id IN (${placeholders})`,
+    )
+      .bind(...userIds)
+      .all<MemberRow>()
+    for (const m of members.results ?? []) {
+      membersById[m.telegram_user_id] = m
+    }
+  }
+
+  const votes = (voteRows.results ?? []).map((v) => {
+    let optionIds: number[] = []
+    try {
+      optionIds = JSON.parse(v.option_ids) as number[]
+    } catch {
+      optionIds = []
+    }
+    const member = membersById[v.user_id]
+    return {
+      user_id: v.user_id,
+      option_ids: optionIds,
+      option_texts: optionIds.map((i) => freshPoll.options[i]?.text ?? `Option ${i}`),
+      display_name: member?.display_name ?? v.user_id,
+      username: member?.username ?? null,
+      membership_id: member?.membership_id ?? null,
+      updated_at: v.updated_at,
+    }
+  })
+
+  return c.json({
+    ok: true,
+    poll: {
+      id: freshPoll.id,
+      question: freshPoll.question,
+      options: freshPoll.options,
+      total_voter_count: freshPoll.total_voter_count,
+      is_closed: freshPoll.is_closed,
+      is_anonymous: freshPoll.is_anonymous,
+      allows_multiple_answers: freshPoll.allows_multiple_answers,
+      type: freshPoll.type,
       votes,
     },
   })

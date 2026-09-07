@@ -98,9 +98,43 @@ export async function sendPoll(
   })
 }
 
+/** Returns the sent Message — for polls this includes current voter counts. */
+export async function forwardMessage(
+  botToken: string,
+  params: {
+    chat_id: number | string
+    from_chat_id: number | string
+    message_id: number
+    message_thread_id?: number
+    disable_notification?: boolean
+  },
+): Promise<TelegramApiResponse<TelegramMessageLike>> {
+  return callTelegramApi(botToken, 'forwardMessage', {
+    chat_id: params.chat_id,
+    from_chat_id: params.from_chat_id,
+    message_id: params.message_id,
+    disable_notification: params.disable_notification ?? true,
+    ...(params.message_thread_id != null
+      ? { message_thread_id: params.message_thread_id }
+      : {}),
+  })
+}
+
+export async function deleteMessage(
+  botToken: string,
+  chatId: number | string,
+  messageId: number,
+): Promise<TelegramApiResponse<boolean>> {
+  return callTelegramApi(botToken, 'deleteMessage', {
+    chat_id: chatId,
+    message_id: messageId,
+  })
+}
+
 type TelegramMessageLike = {
   message_id: number
-  poll?: { id: string; question: string }
+  message_thread_id?: number
+  poll?: import('./types').TelegramPoll
 }
 
 export { ALLOWED_UPDATES }

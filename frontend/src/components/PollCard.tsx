@@ -6,8 +6,10 @@ import { exportPollVotesSheet } from '../exportPollVotes'
 export function PollCard({ poll: initial }: { poll: MessagePoll }) {
   const [poll, setPoll] = useState(initial)
   const [exporting, setExporting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('xlsx')
   const [error, setError] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
 
   useEffect(() => {
     setPoll(initial)
@@ -19,6 +21,21 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
   )
   const hasNamedVotes = !poll.is_anonymous && (poll.votes?.length ?? 0) > 0
 
+  async function handleRefresh() {
+    setRefreshing(true)
+    setError(null)
+    setHint(null)
+    try {
+      const res = await api.refreshPoll(poll.id)
+      setPoll(res.poll)
+      setHint('Poll totals refreshed from Telegram.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Refresh failed')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   async function handleExport() {
     setExporting(true)
     setError(null)
@@ -27,7 +44,6 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
       setPoll(res.poll)
       exportPollVotesSheet(res.poll, res.poll.votes ?? [], format)
     } catch (err) {
-      // Fall back to in-memory poll data
       try {
         exportPollVotesSheet(poll, poll.votes ?? [], format)
       } catch {
@@ -72,15 +88,21 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
         {poll.is_anonymous ? ' · anonymous' : ' · public votes'}
         {poll.is_closed ? ' · closed' : ''}
       </div>
-      {!hasNamedVotes && !poll.is_anonymous && total === 0 && (
+      {!hasNamedVotes && (
         <p className="poll-hint muted">
-          Live votes are only available for polls created by the bot. Use{' '}
-          <code>/poll Question</code> then options on new lines (or{' '}
-          <code>/pollm</code> for multiple answers). Closing a user-made poll can
-          sync final totals.
+          Refresh pulls current option totals from Telegram. Named voters only
+          appear for public polls created with <code>/poll</code>.
         </p>
       )}
       <div className="poll-export">
+        <button
+          type="button"
+          className="secondary"
+          disabled={refreshing}
+          onClick={() => void handleRefresh()}
+        >
+          {refreshing ? 'Refreshing…' : 'Refresh votes'}
+        </button>
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value as ExportFormat)}
@@ -94,6 +116,7 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
           {exporting ? 'Exporting…' : 'Export votes'}
         </button>
       </div>
+      {hint && <p className="ok">{hint}</p>}
       {error && <p className="error">{error}</p>}
     </div>
   )
