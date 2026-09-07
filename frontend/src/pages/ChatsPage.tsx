@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, type ChatMessage, type Group, type Topic } from '../api'
 
 function formatTime(iso: string): string {
@@ -31,10 +32,16 @@ function topicLabel(topic: Topic): string {
   return `Topic ${topic.message_thread_id}`
 }
 
+function isForumChat(chat: Group): boolean {
+  return chat.is_forum === 1 || chat.topics.length > 0
+}
+
 export function ChatsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedChatId = searchParams.get('chat')
+  const selectedThreadId = searchParams.get('thread')
+
   const [chats, setChats] = useState<Group[]>([])
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [expandedForums, setExpandedForums] = useState<Record<string, boolean>>({})
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingChats, setLoadingChats] = useState(true)
@@ -50,15 +57,6 @@ export function ChatsPage() {
       .then((res) => {
         if (cancelled) return
         setChats(res.groups)
-        if (res.groups.length > 0) {
-          const first = res.groups[0]
-          setSelectedChatId((prev) => prev ?? first.chat_id)
-          const isForum = first.is_forum === 1 || first.topics.length > 0
-          if (isForum && first.topics.length > 0) {
-            setExpandedForums((prev) => ({ ...prev, [first.chat_id]: true }))
-            setSelectedThreadId((prev) => prev ?? first.topics[0].message_thread_id)
-          }
-        }
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load chats')
@@ -71,14 +69,25 @@ export function ChatsPage() {
     }
   }, [])
 
+  // Expand forum when URL points at a chat/topic
+  useEffect(() => {
+    if (!selectedChatId) return
+    setExpandedForums((prev) =>
+      prev[selectedChatId] ? prev : { ...prev, [selectedChatId]: true },
+    )
+  }, [selectedChatId])
+
   useEffect(() => {
     if (!selectedChatId) {
       setMessages([])
       return
     }
     const chat = chats.find((g) => g.chat_id === selectedChatId)
-    const isForum = Boolean(chat && (chat.is_forum === 1 || chat.topics.length > 0))
-    if (isForum && !selectedThreadId) {
+    // Wait until chats are loaded before deciding forum vs non-forum
+    if (loadingChats) return
+
+    const forum = chat ? isForumChat(chat) : Boolean(selectedThreadId)
+    if (forum && !selectedThreadId) {
       setMessages([])
       return
     }
@@ -89,7 +98,7 @@ export function ChatsPage() {
     api
       .messages(selectedChatId, {
         limit: 100,
-        threadId: isForum ? selectedThreadId : null,
+        threadId: forum ? selectedThreadId : null,
       })
       .then((res) => {
         if (!cancelled) setMessages(res.messages)
@@ -103,7 +112,7 @@ export function ChatsPage() {
     return () => {
       cancelled = true
     }
-  }, [selectedChatId, selectedThreadId, chats])
+  }, [selectedChatId, selectedThreadId, chats, loadingChats])
 
   useEffect(() => {
     if (!jsonMessage) return
@@ -117,25 +126,29 @@ export function ChatsPage() {
   const selected = chats.find((g) => g.chat_id === selectedChatId) ?? null
   const selectedTopic =
     selected?.topics.find((t) => t.message_thread_id === selectedThreadId) ?? null
-  const selectedIsForum = Boolean(
-    selected && (selected.is_forum === 1 || selected.topics.length > 0),
-  )
+  const selectedIsForum = Boolean(selected && isForumChat(selected))
+
+  function setSelection(chatId: string | null, threadId: string | null) {
+    const next = new URLSearchParams()
+    if (chatId) next.set('chat', chatId)
+    if (chatId && threadId) next.set('thread', threadId)
+    setSearchParams(next, { replace: false })
+  }
 
   function selectChat(chat: Group) {
-    const isForum = chat.is_forum === 1 || chat.topics.length > 0
-    setSelectedChatId(chat.chat_id)
-    if (isForum) {
-      setExpandedForums((prev) => ({ ...prev, [chat.chat_id]: true }))
-      setSelectedThreadId(chat.topics[0]?.message_thread_id ?? null)
+    const forum = isForumChat(chat)
+    setExpandedForums((prev) => ({ ...prev, [chat.chat_id]: true }))
+    if (forum) {
+      // Open the group only; user picks a topic (unless URL already has one for this chat)
+      setSelection(chat.chat_id, null)
     } else {
-      setSelectedThreadId(null)
+      setSelection(chat.chat_id, null)
     }
   }
 
   function selectTopic(chat: Group, topic: Topic) {
-    setSelectedChatId(chat.chat_id)
-    setSelectedThreadId(topic.message_thread_id)
     setExpandedForums((prev) => ({ ...prev, [chat.chat_id]: true }))
+    setSelection(chat.chat_id, topic.message_thread_id)
   }
 
   function toggleForum(chatId: string) {
@@ -158,16 +171,16 @@ export function ChatsPage() {
         )}
         <ul>
           {chats.map((g) => {
-            const isForum = g.is_forum === 1 || g.topics.length > 0
+            const forum = isForumChat(g)
             const expanded = expandedForums[g.chat_id]
-            const chatActive = g.chat_id === selectedChatId && !isForum
+            const chatActive = g.chat_id === selectedChatId && !forum
             return (
               <li key={g.chat_id}>
                 <div className="chat-row">
                   <button
                     type="button"
                     className={
-                      chatActive || (g.chat_id === selectedChatId && isForum && !selectedThreadId)
+                      chatActive || (g.chat_id === selectedChatId && forum && !selectedThreadId)
                         ? 'group-item active'
                         : 'group-item'
                     }
@@ -177,7 +190,7 @@ export function ChatsPage() {
                     <span className="group-meta">
                       <span className="group-title">{g.title || g.chat_id}</span>
                       <span className="group-sub muted">
-                        {isForum
+                        {forum
                           ? `${g.topics.length} topic${g.topics.length === 1 ? '' : 's'}`
                           : g.is_active
                             ? g.username
@@ -187,7 +200,7 @@ export function ChatsPage() {
                       </span>
                     </span>
                   </button>
-                  {isForum && (
+                  {forum && (
                     <button
                       type="button"
                       className="topic-toggle"
@@ -198,7 +211,7 @@ export function ChatsPage() {
                     </button>
                   )}
                 </div>
-                {isForum && expanded && (
+                {forum && expanded && (
                   <ul className="topic-list">
                     {g.topics.length === 0 && (
                       <li className="muted pad-sm">No topics discovered yet.</li>
@@ -232,13 +245,17 @@ export function ChatsPage() {
         <div className="pane-header chat-header">{headerTitle}</div>
         {error && <p className="error pad">{error}</p>}
         <div className="message-scroll">
-          {selectedIsForum && !selectedThreadId && (
+          {!selectedChatId && <p className="muted pad">Select a chat to view messages.</p>}
+          {selectedIsForum && selectedChatId && !selectedThreadId && (
             <p className="muted pad">Select a topic to view messages.</p>
           )}
           {loadingMessages && <p className="muted pad">Loading messages…</p>}
-          {!loadingMessages && selected && (!selectedIsForum || selectedThreadId) && messages.length === 0 && (
-            <p className="muted pad">No messages stored yet.</p>
-          )}
+          {!loadingMessages &&
+            selected &&
+            (!selectedIsForum || selectedThreadId) &&
+            messages.length === 0 && (
+              <p className="muted pad">No messages stored yet.</p>
+            )}
           {messages.map((m) => (
             <article key={m.id} className="bubble">
               <header className="bubble-head">
