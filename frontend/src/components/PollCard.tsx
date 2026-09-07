@@ -1,24 +1,57 @@
-import type { MessagePoll } from '../api'
+import { useEffect, useState } from 'react'
+import { api, type MessagePoll } from '../api'
+import { type ExportFormat } from '../exportAnalytics'
+import { exportPollVotesSheet } from '../exportPollVotes'
 
-export function PollCard({ poll }: { poll: MessagePoll }) {
+export function PollCard({ poll: initial }: { poll: MessagePoll }) {
+  const [poll, setPoll] = useState(initial)
+  const [exporting, setExporting] = useState(false)
+  const [format, setFormat] = useState<ExportFormat>('xlsx')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPoll(initial)
+  }, [initial])
+
   const total = Math.max(poll.total_voter_count, 0)
   const votersByOption = poll.options.map((_, idx) =>
-    poll.votes.filter((v) => v.option_ids.includes(idx)),
+    (poll.votes ?? []).filter((v) => v.option_ids.includes(idx)),
   )
+  const hasNamedVotes = !poll.is_anonymous && (poll.votes?.length ?? 0) > 0
+
+  async function handleExport() {
+    setExporting(true)
+    setError(null)
+    try {
+      const res = await api.poll(poll.id)
+      setPoll(res.poll)
+      exportPollVotesSheet(res.poll, res.poll.votes ?? [], format)
+    } catch (err) {
+      // Fall back to in-memory poll data
+      try {
+        exportPollVotesSheet(poll, poll.votes ?? [], format)
+      } catch {
+        setError(err instanceof Error ? err.message : 'Export failed')
+      }
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="poll-card">
       <div className="poll-question">{poll.question}</div>
       <ul className="poll-options">
         {poll.options.map((opt, idx) => {
-          const pct = total > 0 ? Math.round((opt.voter_count / total) * 100) : 0
+          const count = Math.max(opt.voter_count, votersByOption[idx]?.length ?? 0)
+          const pct = total > 0 ? Math.round((count / total) * 100) : 0
           const voters = votersByOption[idx]
           return (
             <li key={`${poll.id}-${idx}`} className="poll-option">
               <div className="poll-option-top">
                 <span className="poll-option-text">{opt.text}</span>
                 <span className="poll-option-meta muted">
-                  {opt.voter_count} · {pct}%
+                  {count} · {pct}%
                 </span>
               </div>
               <div className="poll-bar" aria-hidden="true">
@@ -34,11 +67,34 @@ export function PollCard({ poll }: { poll: MessagePoll }) {
         })}
       </ul>
       <div className="poll-footer muted">
-        {poll.total_voter_count} vote{poll.total_voter_count === 1 ? '' : 's'}
+        {total} vote{total === 1 ? '' : 's'}
         {poll.allows_multiple_answers ? ' · multiple answers' : ''}
         {poll.is_anonymous ? ' · anonymous' : ' · public votes'}
         {poll.is_closed ? ' · closed' : ''}
       </div>
+      {!hasNamedVotes && !poll.is_anonymous && total === 0 && (
+        <p className="poll-hint muted">
+          Live votes are only available for polls created by the bot. Use{' '}
+          <code>/poll Question</code> then options on new lines (or{' '}
+          <code>/pollm</code> for multiple answers). Closing a user-made poll can
+          sync final totals.
+        </p>
+      )}
+      <div className="poll-export">
+        <select
+          value={format}
+          onChange={(e) => setFormat(e.target.value as ExportFormat)}
+          aria-label="Export format"
+        >
+          <option value="xlsx">Excel</option>
+          <option value="ods">ODS</option>
+          <option value="csv">CSV</option>
+        </select>
+        <button type="button" disabled={exporting} onClick={() => void handleExport()}>
+          {exporting ? 'Exporting…' : 'Export votes'}
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
     </div>
   )
 }

@@ -93,18 +93,81 @@ export async function upsertPollVote(
       .prepare(`DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?`)
       .bind(pollId, userId)
       .run()
+  } else {
+    await db
+      .prepare(
+        `INSERT INTO poll_votes (poll_id, user_id, option_ids, vote_json, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(poll_id, user_id) DO UPDATE SET
+           option_ids = excluded.option_ids,
+           vote_json = excluded.vote_json,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(pollId, userId, JSON.stringify(optionIds), voteJson, now)
+      .run()
+  }
+
+  await rebuildPollCountsFromVotes(db, pollId)
+}
+
+/** Recompute option voter_counts from poll_votes (for non-anonymous bot polls). */
+export async function rebuildPollCountsFromVotes(
+  db: D1Database,
+  pollId: string,
+): Promise<void> {
+  const row = await db
+    .prepare(`SELECT poll_json, is_anonymous FROM polls WHERE poll_id = ?`)
+    .bind(pollId)
+    .first<{ poll_json: string; is_anonymous: number }>()
+  if (!row || row.is_anonymous) return
+
+  let poll: TelegramPoll
+  try {
+    poll = JSON.parse(row.poll_json) as TelegramPoll
+  } catch {
     return
   }
 
+  const voteRows = await db
+    .prepare(`SELECT user_id, option_ids FROM poll_votes WHERE poll_id = ?`)
+    .bind(pollId)
+    .all<{ user_id: string; option_ids: string }>()
+
+  const uniqueVoters = new Set<string>()
+  const recount = poll.options.map(() => 0)
+  for (const v of voteRows.results ?? []) {
+    uniqueVoters.add(v.user_id)
+    let ids: number[] = []
+    try {
+      ids = JSON.parse(v.option_ids) as number[]
+    } catch {
+      continue
+    }
+    for (const id of ids) {
+      if (id >= 0 && id < recount.length) recount[id] += 1
+    }
+  }
+
+  poll = {
+    ...poll,
+    options: poll.options.map((opt, idx) => ({
+      ...opt,
+      voter_count: recount[idx] ?? 0,
+    })),
+    total_voter_count: uniqueVoters.size,
+  }
+
+  const now = new Date().toISOString()
   await db
     .prepare(
-      `INSERT INTO poll_votes (poll_id, user_id, option_ids, vote_json, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(poll_id, user_id) DO UPDATE SET
-         option_ids = excluded.option_ids,
-         vote_json = excluded.vote_json,
-         updated_at = excluded.updated_at`,
+      `UPDATE polls SET
+         poll_json = ?,
+         total_voter_count = ?,
+         updated_at = ?
+       WHERE poll_id = ?`,
     )
-    .bind(pollId, userId, JSON.stringify(optionIds), voteJson, now)
+    .bind(JSON.stringify(poll), poll.total_voter_count, now, pollId)
     .run()
+
+  await applyPollUpdateToMessage(db, poll)
 }

@@ -24,6 +24,7 @@ export type PollVote = {
   option_ids: number[]
   display_name: string
   username: string | null
+  membership_id?: string | null
 }
 
 export type MessagePoll = {
@@ -143,6 +144,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ settings }),
     }),
+  poll: (pollId: string) =>
+    request<{ poll: MessagePoll }>(`/api/polls/${encodeURIComponent(pollId)}`),
   webhookInfo: () =>
     request<{
       webhook: {

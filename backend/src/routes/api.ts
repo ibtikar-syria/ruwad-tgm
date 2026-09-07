@@ -216,7 +216,13 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
   const pollIds = [...new Set([...pollsByMessage.values()].map((p) => p.poll_id))]
   const votesByPoll = new Map<
     string,
-    { user_id: string; option_ids: number[]; display_name: string; username: string | null }[]
+    {
+      user_id: string
+      option_ids: number[]
+      display_name: string
+      username: string | null
+      membership_id: string | null
+    }[]
   >()
 
   if (pollIds.length > 0) {
@@ -254,6 +260,7 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
         option_ids: optionIds,
         display_name: member?.display_name ?? v.user_id,
         username: member?.username ?? null,
+        membership_id: member?.membership_id ?? null,
       })
       votesByPoll.set(v.poll_id, list)
     }
@@ -347,6 +354,89 @@ apiRoutes.get('/groups/:chatId/members', async (c) => {
     .all()
 
   return c.json({ members: rows.results ?? [] })
+})
+
+apiRoutes.get('/polls/:pollId', async (c) => {
+  const pollId = c.req.param('pollId')
+  const pollRow = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT poll_id, chat_id, question, poll_json, total_voter_count, is_closed, is_anonymous, allows_multiple_answers
+     FROM polls WHERE poll_id = ?`,
+  )
+    .bind(pollId)
+    .first<{
+      poll_id: string
+      chat_id: string
+      question: string | null
+      poll_json: string
+      total_voter_count: number
+      is_closed: number
+      is_anonymous: number
+      allows_multiple_answers: number
+    }>()
+
+  if (!pollRow) {
+    return c.json({ error: 'Poll not found' }, 404)
+  }
+
+  let poll: TelegramPoll
+  try {
+    poll = JSON.parse(pollRow.poll_json) as TelegramPoll
+  } catch {
+    return c.json({ error: 'Corrupt poll data' }, 500)
+  }
+
+  const voteRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT user_id, option_ids, updated_at FROM poll_votes WHERE poll_id = ? ORDER BY updated_at ASC`,
+  )
+    .bind(pollId)
+    .all<{ user_id: string; option_ids: string; updated_at: string }>()
+
+  const userIds = [...new Set((voteRows.results ?? []).map((v) => v.user_id))]
+  const membersById: Record<string, MemberRow> = {}
+  if (userIds.length > 0) {
+    const placeholders = userIds.map(() => '?').join(',')
+    const members = await c.env.MAIN_DB.prepare(
+      `SELECT * FROM members WHERE telegram_user_id IN (${placeholders})`,
+    )
+      .bind(...userIds)
+      .all<MemberRow>()
+    for (const m of members.results ?? []) {
+      membersById[m.telegram_user_id] = m
+    }
+  }
+
+  const votes = (voteRows.results ?? []).map((v) => {
+    let optionIds: number[] = []
+    try {
+      optionIds = JSON.parse(v.option_ids) as number[]
+    } catch {
+      optionIds = []
+    }
+    const member = membersById[v.user_id]
+    return {
+      user_id: v.user_id,
+      option_ids: optionIds,
+      option_texts: optionIds.map((i) => poll.options[i]?.text ?? `Option ${i}`),
+      display_name: member?.display_name ?? v.user_id,
+      username: member?.username ?? null,
+      membership_id: member?.membership_id ?? null,
+      updated_at: v.updated_at,
+    }
+  })
+
+  return c.json({
+    poll: {
+      id: poll.id,
+      question: poll.question,
+      options: poll.options,
+      total_voter_count: poll.total_voter_count,
+      is_closed: poll.is_closed,
+      is_anonymous: poll.is_anonymous,
+      allows_multiple_answers: poll.allows_multiple_answers,
+      type: poll.type,
+      votes,
+    },
+  })
 })
 
 apiRoutes.patch('/members/:telegramUserId', async (c) => {

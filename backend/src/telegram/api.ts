@@ -75,4 +75,32 @@ export async function sendMessage(
   return callTelegramApi(botToken, 'sendMessage', params)
 }
 
+export async function sendPoll(
+  botToken: string,
+  params: {
+    chat_id: number | string
+    question: string
+    options: string[]
+    is_anonymous?: boolean
+    allows_multiple_answers?: boolean
+    message_thread_id?: number
+  },
+): Promise<TelegramApiResponse<TelegramMessageLike>> {
+  return callTelegramApi(botToken, 'sendPoll', {
+    chat_id: params.chat_id,
+    question: params.question,
+    options: params.options.map((text) => ({ text })),
+    is_anonymous: params.is_anonymous ?? false,
+    allows_multiple_answers: params.allows_multiple_answers ?? false,
+    ...(params.message_thread_id != null
+      ? { message_thread_id: params.message_thread_id }
+      : {}),
+  })
+}
+
+type TelegramMessageLike = {
+  message_id: number
+  poll?: { id: string; question: string }
+}
+
 export { ALLOWED_UPDATES }

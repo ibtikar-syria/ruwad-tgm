@@ -557,6 +557,35 @@ label {
   font-size: 0.75rem;
 }
 
+.poll-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.poll-hint code {
+  font-size: 0.7rem;
+}
+
+.poll-export {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.poll-export select {
+  width: auto;
+  min-width: 6rem;
+}
+
+.poll-export button {
+  background: #2b3b4c;
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 0.4rem 0.7rem;
+}
+
 .pad {
   padding: 1rem;
 }

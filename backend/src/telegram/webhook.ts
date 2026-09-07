@@ -14,8 +14,9 @@ import {
   upsertPollVote,
 } from '../db/polls'
 import type { CloudflareBindings } from '../types'
-import { sendMessage } from './api'
+import { sendMessage, sendPoll } from './api'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
+import { isPollCommand, parsePollCommand } from './pollCommand'
 import { extractTopicTitle } from './topicTitle'
 import type {
   TelegramMessage,
@@ -76,6 +77,124 @@ async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage):
   }
 }
 
+async function handlePollCommand(
+  env: CloudflareBindings,
+  message: TelegramMessage,
+): Promise<void> {
+  if (!env.TELEGRAM_BOT_TOKEN || !message.text) return
+  const parsed = parsePollCommand(message.text)
+  if (!parsed) {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chat_id: message.chat.id,
+      text:
+        'Usage:\n<code>/poll Question\nOption 1\nOption 2</code>\n\nOr:\n<code>/poll Question | Opt1 | Opt2</code>\n\nUse <code>/pollm</code> to allow multiple answers.\nPolls are public (not anonymous) so votes can be tracked.',
+      parse_mode: 'HTML',
+      reply_to_message_id: message.message_id,
+      ...(typeof message.message_thread_id === 'number'
+        ? { message_thread_id: message.message_thread_id }
+        : {}),
+    })
+    return
+  }
+
+  const result = await sendPoll(env.TELEGRAM_BOT_TOKEN, {
+    chat_id: message.chat.id,
+    question: parsed.question,
+    options: parsed.options,
+    is_anonymous: false,
+    allows_multiple_answers: parsed.allowsMultiple,
+    ...(typeof message.message_thread_id === 'number'
+      ? { message_thread_id: message.message_thread_id }
+      : {}),
+  })
+
+  if (!result.ok) {
+    console.error('Failed to send poll', result.description)
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chat_id: message.chat.id,
+      text: `Could not create poll: ${result.description ?? 'unknown error'}`,
+      reply_to_message_id: message.message_id,
+      ...(typeof message.message_thread_id === 'number'
+        ? { message_thread_id: message.message_thread_id }
+        : {}),
+    })
+  }
+}
+
+async function storeGroupMessage(
+  env: CloudflareBindings,
+  message: TelegramMessage,
+  opts: { countStats: boolean; skipStats?: boolean },
+): Promise<void> {
+  const chat = message.chat
+  const chatId = String(chat.id)
+  const fromId = message.from ? String(message.from.id) : '0'
+
+  if (message.from && !message.from.is_bot) {
+    await upsertMember(env.MAIN_DB, message.from)
+    await upsertGroupMember(env.MAIN_DB, chatId, fromId)
+  }
+
+  const id = `${chatId}:${message.message_id}`
+  const existing = opts.countStats
+    ? await env.TELEGRAM_MESSAGES_DB.prepare(
+        `SELECT id FROM all_messages_groups WHERE id = ?`,
+      )
+        .bind(id)
+        .first()
+    : null
+
+  await env.TELEGRAM_MESSAGES_DB.prepare(
+    `INSERT INTO all_messages_groups
+       (id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       message_json = excluded.message_json,
+       message_text = excluded.message_text,
+       message_thread_id = COALESCE(excluded.message_thread_id, all_messages_groups.message_thread_id)`,
+  )
+    .bind(
+      id,
+      JSON.stringify(message),
+      message.text ?? message.caption ?? message.poll?.question ?? null,
+      chatId,
+      fromId,
+      resolveThreadId(message),
+    )
+    .run()
+
+  if (message.poll) {
+    await upsertPoll(env.TELEGRAM_MESSAGES_DB, message.poll, {
+      chatId,
+      messageDbId: id,
+      telegramMessageId: String(message.message_id),
+    })
+  }
+
+  const isServiceTopicEvent = Boolean(
+    message.forum_topic_created ||
+      message.forum_topic_edited ||
+      message.forum_topic_closed ||
+      message.forum_topic_reopened ||
+      message.general_forum_topic_hidden ||
+      message.general_forum_topic_unhidden,
+  )
+
+  if (
+    opts.countStats &&
+    !opts.skipStats &&
+    !existing &&
+    !isServiceTopicEvent &&
+    message.from &&
+    !message.from.is_bot
+  ) {
+    await incrementStats(env.MAIN_DB, chatId, fromId, {
+      messages: 1,
+      replies: message.reply_to_message ? 1 : 0,
+    })
+  }
+}
+
 async function handleMessage(
   env: CloudflareBindings,
   message: TelegramMessage,
@@ -84,6 +203,8 @@ async function handleMessage(
   const chat = message.chat
   const chatId = String(chat.id)
   const shouldReplyInfo = countStats && isInfoCommand(message.text)
+  const shouldCreatePoll =
+    countStats && message.from && !message.from.is_bot && isPollCommand(message.text)
 
   if (chat.type === 'private') {
     if (!message.from) return
@@ -106,6 +227,9 @@ async function handleMessage(
     if (shouldReplyInfo) {
       await replyWithInfo(env, message)
     }
+    if (shouldCreatePoll) {
+      await handlePollCommand(env, message)
+    }
     return
   }
 
@@ -114,66 +238,24 @@ async function handleMessage(
   await upsertGroup(env.MAIN_DB, chat, true)
   await syncTopicFromMessage(env, message)
 
-  // Topic service messages may lack a normal user; still store topic metadata above
-  const isServiceTopicEvent = Boolean(
-    message.forum_topic_created ||
-      message.forum_topic_edited ||
-      message.forum_topic_closed ||
-      message.forum_topic_reopened ||
-      message.general_forum_topic_hidden ||
-      message.general_forum_topic_unhidden,
-  )
-
-  if (!message.from || message.from.is_bot) {
+  // Always store polls (including ones sent by this bot) so votes can be linked
+  if (message.poll) {
+    await storeGroupMessage(env, message, { countStats, skipStats: true })
     return
   }
 
-  const member = await upsertMember(env.MAIN_DB, message.from)
-  await upsertGroupMember(env.MAIN_DB, chatId, member.telegram_user_id)
+  if (!message.from) return
 
-  const id = `${chatId}:${message.message_id}`
-  const existing = countStats
-    ? await env.TELEGRAM_MESSAGES_DB.prepare(
-        `SELECT id FROM all_messages_groups WHERE id = ?`,
-      )
-        .bind(id)
-        .first()
-    : null
+  // Service / other bot messages without polls: ignore content storage
+  if (message.from.is_bot) return
 
-  await env.TELEGRAM_MESSAGES_DB.prepare(
-    `INSERT INTO all_messages_groups
-       (id, message_json, message_text, chat_id, user_id, message_thread_id, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, datetime('now'))
-     ON CONFLICT(id) DO UPDATE SET
-       message_json = excluded.message_json,
-       message_text = excluded.message_text,
-       message_thread_id = COALESCE(excluded.message_thread_id, all_messages_groups.message_thread_id)`,
-  )
-    .bind(
-      id,
-      JSON.stringify(message),
-      message.text ?? message.caption ?? message.poll?.question ?? null,
-      chatId,
-      member.telegram_user_id,
-      resolveThreadId(message),
-    )
-    .run()
-
-  if (message.poll) {
-    await upsertPoll(env.TELEGRAM_MESSAGES_DB, message.poll, {
-      chatId,
-      messageDbId: id,
-      telegramMessageId: String(message.message_id),
-    })
+  if (shouldCreatePoll) {
+    await storeGroupMessage(env, message, { countStats })
+    await handlePollCommand(env, message)
+    return
   }
 
-  // Don't count pure topic-admin service messages toward interaction stats
-  if (countStats && !existing && !isServiceTopicEvent) {
-    await incrementStats(env.MAIN_DB, chatId, member.telegram_user_id, {
-      messages: 1,
-      replies: message.reply_to_message ? 1 : 0,
-    })
-  }
+  await storeGroupMessage(env, message, { countStats })
 
   if (shouldReplyInfo) {
     await replyWithInfo(env, message)
