@@ -18,6 +18,8 @@ export type TelegramPollOption = {
   text: string
   voter_count: number
   persistent_id?: string
+  added_by_user?: TelegramUser
+  addition_date?: number
 }
 
 export type TelegramPoll = {
@@ -30,7 +32,12 @@ export type TelegramPoll = {
   type: string
   allows_multiple_answers: boolean
   allows_revoting?: boolean
+  /** Present on some payloads; not always included by Bot API for received polls */
+  allow_adding_options?: boolean
   members_only?: boolean
+  open_period?: number
+  close_date?: number
+  description?: string
 }
 
 export type TelegramPollAnswer = {

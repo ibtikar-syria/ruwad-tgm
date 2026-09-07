@@ -225,6 +225,7 @@ async function reclaimUserPollAsBotPoll(
   // Drop any DB copy of the deleted user poll (bots don't get delete events)
   await removeStoredGroupMessage(env, chatId, message.message_id)
 
+  const isQuiz = poll.type === 'quiz'
   const sent = await sendPoll(env.TELEGRAM_BOT_TOKEN, {
     chat_id: message.chat.id,
     question: poll.question,
@@ -232,6 +233,17 @@ async function reclaimUserPollAsBotPoll(
     // Always public so we receive poll_answer and can export voters
     is_anonymous: false,
     allows_multiple_answers: poll.allows_multiple_answers,
+    ...(poll.allows_revoting != null ? { allows_revoting: poll.allows_revoting } : {}),
+    type: isQuiz ? 'quiz' : 'regular',
+    // Bot API omits allow_adding_options on received polls, so open-option polls
+    // would silently lose that feature unless we enable it when reclaiming.
+    ...(isQuiz ? {} : { allow_adding_options: true }),
+    ...(poll.close_date != null
+      ? { close_date: poll.close_date }
+      : poll.open_period != null
+        ? { open_period: poll.open_period }
+        : {}),
+    ...(poll.description ? { description: poll.description } : {}),
     ...(typeof message.message_thread_id === 'number'
       ? { message_thread_id: message.message_thread_id }
       : {}),

@@ -83,6 +83,12 @@ export async function sendPoll(
     options: string[]
     is_anonymous?: boolean
     allows_multiple_answers?: boolean
+    allows_revoting?: boolean
+    allow_adding_options?: boolean
+    type?: 'regular' | 'quiz'
+    open_period?: number
+    close_date?: number
+    description?: string
     message_thread_id?: number
   },
 ): Promise<TelegramApiResponse<TelegramMessageLike>> {
@@ -92,6 +98,14 @@ export async function sendPoll(
     options: params.options.map((text) => ({ text })),
     is_anonymous: params.is_anonymous ?? false,
     allows_multiple_answers: params.allows_multiple_answers ?? false,
+    type: params.type ?? 'regular',
+    ...(params.allows_revoting != null ? { allows_revoting: params.allows_revoting } : {}),
+    ...(params.allow_adding_options != null
+      ? { allow_adding_options: params.allow_adding_options }
+      : {}),
+    ...(params.open_period != null ? { open_period: params.open_period } : {}),
+    ...(params.close_date != null ? { close_date: params.close_date } : {}),
+    ...(params.description ? { description: params.description } : {}),
     ...(params.message_thread_id != null
       ? { message_thread_id: params.message_thread_id }
       : {}),
