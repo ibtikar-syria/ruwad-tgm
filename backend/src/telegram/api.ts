@@ -3,6 +3,8 @@ const ALLOWED_UPDATES = [
   'edited_message',
   'message_reaction',
   'my_chat_member',
+  'poll',
+  'poll_answer',
 ] as const
 
 type TelegramApiResponse<T> = {

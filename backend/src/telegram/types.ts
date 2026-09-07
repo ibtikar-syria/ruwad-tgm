@@ -14,6 +14,31 @@ export type TelegramChat = {
   is_forum?: boolean
 }
 
+export type TelegramPollOption = {
+  text: string
+  voter_count: number
+  persistent_id?: string
+}
+
+export type TelegramPoll = {
+  id: string
+  question: string
+  options: TelegramPollOption[]
+  total_voter_count: number
+  is_closed: boolean
+  is_anonymous: boolean
+  type: string
+  allows_multiple_answers: boolean
+  allows_revoting?: boolean
+  members_only?: boolean
+}
+
+export type TelegramPollAnswer = {
+  poll_id: string
+  user: TelegramUser
+  option_ids: number[]
+}
+
 export type TelegramMessage = {
   message_id: number
   from?: TelegramUser
@@ -24,6 +49,7 @@ export type TelegramMessage = {
   message_thread_id?: number
   reply_to_message?: TelegramMessage
   is_topic_message?: boolean
+  poll?: TelegramPoll
   forum_topic_created?: { name: string; icon_color?: number; icon_custom_emoji_id?: string }
   forum_topic_edited?: { name?: string; icon_custom_emoji_id?: string }
   forum_topic_closed?: Record<string, never>
@@ -62,4 +88,6 @@ export type TelegramUpdate = {
   edited_message?: TelegramMessage
   message_reaction?: TelegramMessageReactionUpdated
   my_chat_member?: TelegramChatMemberUpdated
+  poll?: TelegramPoll
+  poll_answer?: TelegramPollAnswer
 }

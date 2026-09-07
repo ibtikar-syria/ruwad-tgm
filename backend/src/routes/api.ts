@@ -15,7 +15,9 @@ import {
   setWebhook,
 } from '../telegram/api'
 import { ensureGeneralTopic, upsertTopic } from '../db/members'
+import { upsertPoll } from '../db/polls'
 import { extractTopicTitleFromJson } from '../telegram/topicTitle'
+import type { TelegramPoll } from '../telegram/types'
 
 export const apiRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: AppVariables }>()
 
@@ -162,12 +164,109 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
     }
   }
 
+  const messageIds = messages.map((m) => m.id)
+  const pollsByMessage = new Map<
+    string,
+    {
+      poll_id: string
+      poll_json: string
+      is_anonymous: number
+    }
+  >()
+  if (messageIds.length > 0) {
+    const placeholders = messageIds.map(() => '?').join(',')
+    const pollRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+      `SELECT poll_id, message_db_id, poll_json, is_anonymous
+       FROM polls
+       WHERE message_db_id IN (${placeholders})`,
+    )
+      .bind(...messageIds)
+      .all<{
+        poll_id: string
+        message_db_id: string
+        poll_json: string
+        is_anonymous: number
+      }>()
+    for (const p of pollRows.results ?? []) {
+      pollsByMessage.set(p.message_db_id, p)
+    }
+  }
+
+  // Backfill polls from message_json when not yet in polls table
+  for (const m of messages) {
+    if (pollsByMessage.has(m.id)) continue
+    try {
+      const parsed = JSON.parse(m.message_json) as { poll?: TelegramPoll }
+      if (!parsed.poll?.id) continue
+      await upsertPoll(c.env.TELEGRAM_MESSAGES_DB, parsed.poll, {
+        chatId: m.chat_id,
+        messageDbId: m.id,
+        telegramMessageId: m.id.split(':').pop() ?? null,
+      })
+      pollsByMessage.set(m.id, {
+        poll_id: parsed.poll.id,
+        poll_json: JSON.stringify(parsed.poll),
+        is_anonymous: parsed.poll.is_anonymous ? 1 : 0,
+      })
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const pollIds = [...new Set([...pollsByMessage.values()].map((p) => p.poll_id))]
+  const votesByPoll = new Map<
+    string,
+    { user_id: string; option_ids: number[]; display_name: string; username: string | null }[]
+  >()
+
+  if (pollIds.length > 0) {
+    const placeholders = pollIds.map(() => '?').join(',')
+    const voteRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+      `SELECT poll_id, user_id, option_ids FROM poll_votes WHERE poll_id IN (${placeholders})`,
+    )
+      .bind(...pollIds)
+      .all<{ poll_id: string; user_id: string; option_ids: string }>()
+
+    const voteUserIds = [...new Set((voteRows.results ?? []).map((v) => v.user_id))]
+    if (voteUserIds.length > 0) {
+      const mPlaceholders = voteUserIds.map(() => '?').join(',')
+      const voteMembers = await c.env.MAIN_DB.prepare(
+        `SELECT * FROM members WHERE telegram_user_id IN (${mPlaceholders})`,
+      )
+        .bind(...voteUserIds)
+        .all<MemberRow>()
+      for (const m of voteMembers.results ?? []) {
+        membersById[m.telegram_user_id] = m
+      }
+    }
+
+    for (const v of voteRows.results ?? []) {
+      let optionIds: number[] = []
+      try {
+        optionIds = JSON.parse(v.option_ids) as number[]
+      } catch {
+        optionIds = []
+      }
+      const member = membersById[v.user_id]
+      const list = votesByPoll.get(v.poll_id) ?? []
+      list.push({
+        user_id: v.user_id,
+        option_ids: optionIds,
+        display_name: member?.display_name ?? v.user_id,
+        username: member?.username ?? null,
+      })
+      votesByPoll.set(v.poll_id, list)
+    }
+  }
+
   return c.json({
     messages: messages.map((m) => {
       let replyTo: { message_id?: number; text?: string } | null = null
+      let pollFromJson: TelegramPoll | null = null
       try {
         const parsed = JSON.parse(m.message_json) as {
           reply_to_message?: { message_id?: number; text?: string; caption?: string }
+          poll?: TelegramPoll
         }
         if (parsed.reply_to_message) {
           replyTo = {
@@ -175,9 +274,21 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
             text: parsed.reply_to_message.text ?? parsed.reply_to_message.caption,
           }
         }
+        if (parsed.poll) pollFromJson = parsed.poll
       } catch {
         /* ignore */
       }
+
+      const stored = pollsByMessage.get(m.id)
+      let poll: TelegramPoll | null = pollFromJson
+      if (stored) {
+        try {
+          poll = JSON.parse(stored.poll_json) as TelegramPoll
+        } catch {
+          /* keep pollFromJson */
+        }
+      }
+
       const member = membersById[m.user_id]
       return {
         id: m.id,
@@ -191,6 +302,19 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
         membership_id: member?.membership_id ?? null,
         reply_to: replyTo,
         message_json: m.message_json,
+        poll: poll
+          ? {
+              id: poll.id,
+              question: poll.question,
+              options: poll.options,
+              total_voter_count: poll.total_voter_count,
+              is_closed: poll.is_closed,
+              is_anonymous: poll.is_anonymous,
+              allows_multiple_answers: poll.allows_multiple_answers,
+              type: poll.type,
+              votes: poll.is_anonymous ? [] : (votesByPoll.get(poll.id) ?? []),
+            }
+          : null,
       }
     }),
   })

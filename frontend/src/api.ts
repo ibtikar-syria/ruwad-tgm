@@ -19,6 +19,25 @@ export type Group = {
   topics: Topic[]
 }
 
+export type PollVote = {
+  user_id: string
+  option_ids: number[]
+  display_name: string
+  username: string | null
+}
+
+export type MessagePoll = {
+  id: string
+  question: string
+  options: { text: string; voter_count: number }[]
+  total_voter_count: number
+  is_closed: boolean
+  is_anonymous: boolean
+  allows_multiple_answers: boolean
+  type: string
+  votes: PollVote[]
+}
+
 export type ChatMessage = {
   id: string
   chat_id: string
@@ -31,6 +50,7 @@ export type ChatMessage = {
   membership_id: string | null
   reply_to: { message_id?: number; text?: string } | null
   message_json: string
+  poll: MessagePoll | null
 }
 
 export type Member = {

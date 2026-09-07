@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, type ChatMessage, type Group, type Topic } from '../api'
+import { PollCard } from '../components/PollCard'
 
 function formatTime(iso: string): string {
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
@@ -305,7 +306,11 @@ export function ChatsPage() {
                   Reply: {m.reply_to.text || `#${m.reply_to.message_id}`}
                 </div>
               )}
-              <p className="bubble-text">{m.text || <em className="muted">(no text)</em>}</p>
+              {m.poll ? (
+                <PollCard poll={m.poll} />
+              ) : (
+                <p className="bubble-text">{m.text || <em className="muted">(no text)</em>}</p>
+              )}
             </article>
           ))}
         </div>

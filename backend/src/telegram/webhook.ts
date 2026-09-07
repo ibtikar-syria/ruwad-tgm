@@ -8,6 +8,11 @@ import {
   upsertTopic,
   ensureGeneralTopic,
 } from '../db/members'
+import {
+  applyPollUpdateToMessage,
+  upsertPoll,
+  upsertPollVote,
+} from '../db/polls'
 import type { CloudflareBindings } from '../types'
 import { sendMessage } from './api'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
@@ -15,6 +20,8 @@ import { extractTopicTitle } from './topicTitle'
 import type {
   TelegramMessage,
   TelegramMessageReactionUpdated,
+  TelegramPoll,
+  TelegramPollAnswer,
   TelegramUpdate,
 } from './types'
 
@@ -145,12 +152,20 @@ async function handleMessage(
     .bind(
       id,
       JSON.stringify(message),
-      message.text ?? message.caption ?? null,
+      message.text ?? message.caption ?? message.poll?.question ?? null,
       chatId,
       member.telegram_user_id,
       resolveThreadId(message),
     )
     .run()
+
+  if (message.poll) {
+    await upsertPoll(env.TELEGRAM_MESSAGES_DB, message.poll, {
+      chatId,
+      messageDbId: id,
+      telegramMessageId: String(message.message_id),
+    })
+  }
 
   // Don't count pure topic-admin service messages toward interaction stats
   if (countStats && !existing && !isServiceTopicEvent) {
@@ -163,6 +178,51 @@ async function handleMessage(
   if (shouldReplyInfo) {
     await replyWithInfo(env, message)
   }
+}
+
+async function handlePollUpdate(env: CloudflareBindings, poll: TelegramPoll): Promise<void> {
+  const existing = await env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT chat_id, message_db_id, telegram_message_id FROM polls WHERE poll_id = ?`,
+  )
+    .bind(poll.id)
+    .first<{
+      chat_id: string
+      message_db_id: string | null
+      telegram_message_id: string | null
+    }>()
+
+  await upsertPoll(env.TELEGRAM_MESSAGES_DB, poll, {
+    chatId: existing?.chat_id ?? 'unknown',
+    messageDbId: existing?.message_db_id,
+    telegramMessageId: existing?.telegram_message_id,
+  })
+  await applyPollUpdateToMessage(env.TELEGRAM_MESSAGES_DB, poll)
+}
+
+async function handlePollAnswer(
+  env: CloudflareBindings,
+  answer: TelegramPollAnswer,
+): Promise<void> {
+  if (answer.user.is_bot) return
+  await upsertMember(env.MAIN_DB, answer.user)
+
+  const pollRow = await env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT chat_id FROM polls WHERE poll_id = ?`,
+  )
+    .bind(answer.poll_id)
+    .first<{ chat_id: string }>()
+
+  if (pollRow?.chat_id && pollRow.chat_id !== 'unknown') {
+    await upsertGroupMember(env.MAIN_DB, pollRow.chat_id, String(answer.user.id))
+  }
+
+  await upsertPollVote(
+    env.TELEGRAM_MESSAGES_DB,
+    answer.poll_id,
+    answer.user,
+    answer.option_ids,
+    JSON.stringify(answer),
+  )
 }
 
 async function handleReaction(
@@ -240,6 +300,12 @@ export async function handleTelegramUpdate(
   }
   if (update.my_chat_member) {
     await handleMyChatMember(env, update.my_chat_member)
+  }
+  if (update.poll) {
+    await handlePollUpdate(env, update.poll)
+  }
+  if (update.poll_answer) {
+    await handlePollAnswer(env, update.poll_answer)
   }
 }
 
