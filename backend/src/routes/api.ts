@@ -15,6 +15,7 @@ import {
   setWebhook,
 } from '../telegram/api'
 import { upsertTopic } from '../db/members'
+import { extractTopicTitleFromJson } from '../telegram/topicTitle'
 
 export const apiRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: AppVariables }>()
 
@@ -36,18 +37,9 @@ apiRoutes.get('/groups', async (c) => {
   const titleByKey = new Map<string, string>()
   for (const row of titleRows.results ?? []) {
     if (!row.message_thread_id) continue
-    try {
-      const parsed = JSON.parse(row.message_json) as {
-        forum_topic_created?: { name?: string }
-        forum_topic_edited?: { name?: string }
-      }
-      const name =
-        parsed.forum_topic_created?.name ?? parsed.forum_topic_edited?.name
-      if (name) {
-        titleByKey.set(`${row.chat_id}:${row.message_thread_id}`, name)
-      }
-    } catch {
-      /* ignore */
+    const name = extractTopicTitleFromJson(row.message_json)
+    if (name) {
+      titleByKey.set(`${row.chat_id}:${row.message_thread_id}`, name)
     }
   }
 

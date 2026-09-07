@@ -10,6 +10,7 @@ import {
 import type { CloudflareBindings } from '../types'
 import { sendMessage } from './api'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
+import { extractTopicTitle } from './topicTitle'
 import type {
   TelegramMessage,
   TelegramMessageReactionUpdated,
@@ -29,15 +30,8 @@ async function syncTopicFromMessage(
     message.message_thread_id != null ? String(message.message_thread_id) : null
   if (!threadId) return
 
-  let title: string | null = null
-  if (message.forum_topic_created?.name) {
-    title = message.forum_topic_created.name
-  } else if (message.forum_topic_edited?.name) {
-    title = message.forum_topic_edited.name
-  }
-
   await upsertTopic(env.MAIN_DB, chatId, threadId, {
-    title,
+    title: extractTopicTitle(message),
     isGeneral: threadId === '1',
     markForum: true,
   })
