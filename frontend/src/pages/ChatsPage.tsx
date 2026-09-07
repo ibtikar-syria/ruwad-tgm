@@ -46,27 +46,55 @@ export function ChatsPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingChats, setLoadingChats] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [jsonMessage, setJsonMessage] = useState<ChatMessage | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  async function loadChats() {
     setLoadingChats(true)
-    api
-      .groups()
-      .then((res) => {
-        if (cancelled) return
-        setChats(res.groups)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load chats')
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingChats(false)
-      })
-    return () => {
-      cancelled = true
+    setError(null)
+    try {
+      const res = await api.groups()
+      setChats(res.groups)
+      return res.groups
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load chats')
+      return null
+    } finally {
+      setLoadingChats(false)
     }
+  }
+
+  async function loadMessages(
+    chatId: string,
+    threadId: string | null,
+    groups: Group[],
+    opts?: { quiet?: boolean },
+  ) {
+    const chat = groups.find((g) => g.chat_id === chatId)
+    const forum = chat ? isForumChat(chat) : Boolean(threadId)
+    if (forum && !threadId) {
+      setMessages([])
+      return
+    }
+
+    if (!opts?.quiet) setLoadingMessages(true)
+    setError(null)
+    try {
+      const res = await api.messages(chatId, {
+        limit: 100,
+        threadId: forum ? threadId : null,
+      })
+      setMessages(res.messages)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load messages')
+    } finally {
+      if (!opts?.quiet) setLoadingMessages(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadChats()
   }, [])
 
   // Expand forum when URL points at a chat/topic
@@ -82,37 +110,24 @@ export function ChatsPage() {
       setMessages([])
       return
     }
-    const chat = chats.find((g) => g.chat_id === selectedChatId)
-    // Wait until chats are loaded before deciding forum vs non-forum
     if (loadingChats) return
-
-    const forum = chat ? isForumChat(chat) : Boolean(selectedThreadId)
-    if (forum && !selectedThreadId) {
-      setMessages([])
-      return
-    }
-
-    let cancelled = false
-    setLoadingMessages(true)
-    setError(null)
-    api
-      .messages(selectedChatId, {
-        limit: 100,
-        threadId: forum ? selectedThreadId : null,
-      })
-      .then((res) => {
-        if (!cancelled) setMessages(res.messages)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load messages')
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingMessages(false)
-      })
-    return () => {
-      cancelled = true
-    }
+    void loadMessages(selectedChatId, selectedThreadId, chats)
   }, [selectedChatId, selectedThreadId, chats, loadingChats])
+
+  async function refreshOpenChat() {
+    if (!selectedChatId) return
+    setRefreshing(true)
+    setError(null)
+    try {
+      const groups = await api.groups()
+      setChats(groups.groups)
+      await loadMessages(selectedChatId, selectedThreadId, groups.groups, { quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     if (!jsonMessage) return
@@ -242,7 +257,20 @@ export function ChatsPage() {
       </aside>
 
       <section className="chat-pane">
-        <div className="pane-header chat-header">{headerTitle}</div>
+        <div className="pane-header chat-header">
+          <span className="chat-header-title">{headerTitle}</span>
+          {selectedChatId && (!selectedIsForum || selectedThreadId) && (
+            <button
+              type="button"
+              className="chat-refresh-btn"
+              disabled={refreshing || loadingMessages}
+              onClick={() => void refreshOpenChat()}
+              title="Refresh messages"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+          )}
+        </div>
         {error && <p className="error pad">{error}</p>}
         <div className="message-scroll">
           {!selectedChatId && <p className="muted pad">Select a chat to view messages.</p>}
