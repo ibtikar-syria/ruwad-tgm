@@ -336,6 +336,7 @@ apiRoutes.get('/groups/:chatId/members', async (c) => {
        m.id,
        m.telegram_user_id,
        m.membership_id,
+       m.custom_name,
        m.display_name,
        m.username,
        m.first_seen_at,
@@ -586,27 +587,41 @@ apiRoutes.post('/polls/:pollId/refresh', async (c) => {
 
 apiRoutes.patch('/members/:telegramUserId', async (c) => {
   const telegramUserId = c.req.param('telegramUserId')
-  let body: { membership_id?: string | null }
+  let body: { membership_id?: string | null; custom_name?: string | null }
   try {
     body = await c.req.json()
   } catch {
     return c.json({ error: 'Invalid JSON' }, 400)
   }
 
-  if (!('membership_id' in body)) {
-    return c.json({ error: 'membership_id is required' }, 400)
+  const hasMembershipId = 'membership_id' in body
+  const hasCustomName = 'custom_name' in body
+  if (!hasMembershipId && !hasCustomName) {
+    return c.json({ error: 'membership_id or custom_name is required' }, 400)
   }
 
-  const membershipId =
-    body.membership_id === null || body.membership_id === ''
-      ? null
-      : String(body.membership_id).trim()
+  const normalize = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) return null
+    const trimmed = String(value).trim()
+    return trimmed === '' ? null : trimmed
+  }
+
+  const assignments: string[] = []
+  const values: (string | null)[] = []
+  if (hasMembershipId) {
+    assignments.push('membership_id = ?')
+    values.push(normalize(body.membership_id))
+  }
+  if (hasCustomName) {
+    assignments.push('custom_name = ?')
+    values.push(normalize(body.custom_name))
+  }
 
   const now = new Date().toISOString()
   const result = await c.env.MAIN_DB.prepare(
-    `UPDATE members SET membership_id = ?, updated_at = ? WHERE telegram_user_id = ?`,
+    `UPDATE members SET ${assignments.join(', ')}, updated_at = ? WHERE telegram_user_id = ?`,
   )
-    .bind(membershipId, now, telegramUserId)
+    .bind(...values, now, telegramUserId)
     .run()
 
   if (!result.meta.changes) {
@@ -620,6 +635,132 @@ apiRoutes.patch('/members/:telegramUserId', async (c) => {
     .first<MemberRow>()
 
   return c.json({ member })
+})
+
+type MemberImportRow = {
+  telegram_user_id?: string | null
+  username?: string | null
+  custom_name?: string | null
+  membership_id?: string | null
+  display_name?: string | null
+}
+
+const MEMBER_IMPORT_LIMIT = 5000
+
+apiRoutes.post('/members/import', async (c) => {
+  let body: { rows?: MemberImportRow[] }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
+
+  const rows = body.rows
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return c.json({ error: 'rows must be a non-empty array' }, 400)
+  }
+  if (rows.length > MEMBER_IMPORT_LIMIT) {
+    return c.json({ error: `Too many rows (max ${MEMBER_IMPORT_LIMIT})` }, 400)
+  }
+
+  const clean = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) return null
+    const trimmed = String(value).trim()
+    return trimmed === '' ? null : trimmed
+  }
+
+  const existing = await c.env.MAIN_DB.prepare(
+    `SELECT telegram_user_id, username FROM members`,
+  ).all<{ telegram_user_id: string; username: string | null }>()
+
+  const knownIds = new Set<string>()
+  const idByUsername = new Map<string, string>()
+  for (const m of existing.results ?? []) {
+    knownIds.add(m.telegram_user_id)
+    if (m.username) idByUsername.set(m.username.toLowerCase(), m.telegram_user_id)
+  }
+
+  const now = new Date().toISOString()
+  const statements: D1PreparedStatement[] = []
+  const skipped: { row: number; reason: string }[] = []
+  const seen = new Set<string>()
+  let updated = 0
+  let created = 0
+
+  rows.forEach((raw, index) => {
+    // Row 1 is the header in the source file, so data starts at 2
+    const rowNumber = index + 2
+    const telegramUserId = clean(raw.telegram_user_id)
+    const username = clean(raw.username)?.replace(/^@/, '') ?? null
+    const customName = clean(raw.custom_name)
+    const membershipId = clean(raw.membership_id)
+    const displayName = clean(raw.display_name)
+
+    let targetId = telegramUserId
+    if (!targetId && username) {
+      targetId = idByUsername.get(username.toLowerCase()) ?? null
+      if (!targetId) {
+        skipped.push({ row: rowNumber, reason: `No member matches @${username}` })
+        return
+      }
+    }
+
+    if (!targetId) {
+      skipped.push({ row: rowNumber, reason: 'Missing Telegram user ID and username' })
+      return
+    }
+    if (!/^-?\d+$/.test(targetId)) {
+      skipped.push({ row: rowNumber, reason: `Invalid Telegram user ID "${targetId}"` })
+      return
+    }
+    if (seen.has(targetId)) {
+      skipped.push({ row: rowNumber, reason: `Duplicate Telegram user ID ${targetId}` })
+      return
+    }
+    if (!customName && !membershipId) {
+      skipped.push({ row: rowNumber, reason: 'Nothing to import (no custom name or membership ID)' })
+      return
+    }
+    seen.add(targetId)
+
+    if (knownIds.has(targetId)) {
+      updated += 1
+      statements.push(
+        c.env.MAIN_DB.prepare(
+          `UPDATE members SET
+             membership_id = COALESCE(?, membership_id),
+             custom_name = COALESCE(?, custom_name),
+             updated_at = ?
+           WHERE telegram_user_id = ?`,
+        ).bind(membershipId, customName, now, targetId),
+      )
+    } else {
+      created += 1
+      statements.push(
+        c.env.MAIN_DB.prepare(
+          `INSERT INTO members
+             (id, telegram_user_id, membership_id, custom_name, display_name, username, first_seen_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(),
+          targetId,
+          membershipId,
+          customName,
+          displayName ?? customName,
+          username,
+          now,
+          now,
+        ),
+      )
+    }
+  })
+
+  // D1 caps how much a single batch can carry, so send it in chunks
+  for (let i = 0; i < statements.length; i += 50) {
+    await c.env.MAIN_DB.batch(statements.slice(i, i + 50))
+  }
+
+  return c.json({ ok: true, updated, created, skipped })
 })
 
 apiRoutes.get('/members', async (c) => {

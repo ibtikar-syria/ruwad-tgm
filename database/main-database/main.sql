@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
     telegram_user_id TEXT NOT NULL UNIQUE,
     membership_id TEXT,
+    custom_name TEXT,
     display_name TEXT,
     username TEXT,
     first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),

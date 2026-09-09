@@ -1094,6 +1094,66 @@ button.danger {
   border: 1px solid rgba(227, 93, 106, 0.45);
 }
 
+.import-drop {
+  position: relative;
+}
+
+.import-file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.import-drop-label {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+  text-align: center;
+  padding: 1.35rem 1rem;
+  border: 1px dashed #3a4d61;
+  border-radius: 12px;
+  background: rgba(16, 25, 36, 0.85);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.import-drop-label span {
+  font-size: 0.82rem;
+}
+
+.import-drop:hover .import-drop-label,
+.import-file-input:focus-visible + .import-drop-label {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.import-preview {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.import-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.import-skipped {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
 .webhook-status {
   display: grid;
   gap: 0.35rem;

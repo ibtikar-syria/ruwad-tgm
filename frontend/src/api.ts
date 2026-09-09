@@ -58,6 +58,7 @@ export type Member = {
   id: string
   telegram_user_id: string
   membership_id: string | null
+  custom_name: string | null
   display_name: string | null
   username: string | null
   first_seen_at: string
@@ -133,10 +134,31 @@ export const api = {
         )
       : request<{ analytics: AnalyticsRow[] }>('/api/analytics'),
   members: () => request<{ members: Member[] }>('/api/members'),
-  updateMembershipId: (telegramUserId: string, membership_id: string | null) =>
+  updateMember: (
+    telegramUserId: string,
+    patch: { membership_id?: string | null; custom_name?: string | null },
+  ) =>
     request<{ member: Member }>(`/api/members/${encodeURIComponent(telegramUserId)}`, {
       method: 'PATCH',
-      body: JSON.stringify({ membership_id }),
+      body: JSON.stringify(patch),
+    }),
+  importMembers: (
+    rows: {
+      telegram_user_id: string | null
+      username: string | null
+      custom_name: string | null
+      membership_id: string | null
+      display_name: string | null
+    }[],
+  ) =>
+    request<{
+      ok: boolean
+      updated: number
+      created: number
+      skipped: { row: number; reason: string }[]
+    }>('/api/members/import', {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
     }),
   settings: () => request<{ settings: Record<string, string> }>('/api/settings'),
   updateSettings: (settings: Record<string, string>) =>

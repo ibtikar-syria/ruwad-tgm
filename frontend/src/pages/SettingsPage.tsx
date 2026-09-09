@@ -1,14 +1,32 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { api, type Member } from '../api'
+import {
+  downloadMemberTemplate,
+  IMPORT_ACCEPT,
+  parseMemberFile,
+  type MemberImportRow,
+} from '../importMembers'
 
 function settingIsOn(value: string | undefined): boolean {
   const v = (value ?? '').trim().toLowerCase()
   return v === '1' || v === 'true' || v === 'yes' || v === 'on'
 }
 
+type MemberDraft = {
+  membership_id: string
+  custom_name: string
+}
+
+function draftFor(member: Member): MemberDraft {
+  return {
+    membership_id: member.membership_id ?? '',
+    custom_name: member.custom_name ?? '',
+  }
+}
+
 export function SettingsPage() {
   const [members, setMembers] = useState<Member[]>([])
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [drafts, setDrafts] = useState<Record<string, MemberDraft>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [memberQuery, setMemberQuery] = useState('')
   const [appName, setAppName] = useState('')
@@ -27,6 +45,13 @@ export function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importFileName, setImportFileName] = useState<string | null>(null)
+  const [importRows, setImportRows] = useState<MemberImportRow[]>([])
+  const [importSkipped, setImportSkipped] = useState<{ row: number; reason: string }[]>([])
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+
   async function loadWebhook() {
     const res = await api.webhookInfo()
     setWebhookStatus(res.webhook)
@@ -42,9 +67,9 @@ export function SettingsPage() {
         api.settings(),
       ])
       setMembers(membersRes.members)
-      const next: Record<string, string> = {}
+      const next: Record<string, MemberDraft> = {}
       for (const m of membersRes.members) {
-        next[m.telegram_user_id] = m.membership_id ?? ''
+        next[m.telegram_user_id] = draftFor(m)
       }
       setDrafts(next)
       setAppName(settingsRes.settings.app_name ?? '')
@@ -69,8 +94,10 @@ export function SettingsPage() {
         m.display_name,
         m.username,
         m.telegram_user_id,
-        drafts[m.telegram_user_id],
+        drafts[m.telegram_user_id]?.membership_id,
+        drafts[m.telegram_user_id]?.custom_name,
         m.membership_id,
+        m.custom_name,
       ]
         .filter(Boolean)
         .join(' ')
@@ -82,20 +109,93 @@ export function SettingsPage() {
   const webhookConnected = Boolean(webhookStatus?.url)
   const webhookHasError = Boolean(webhookStatus?.last_error_message)
 
-  async function saveMembership(telegramUserId: string) {
+  async function saveMember(telegramUserId: string) {
     setSavingId(telegramUserId)
     setMessage(null)
     setError(null)
     try {
-      const value = drafts[telegramUserId]?.trim() || null
-      await api.updateMembershipId(telegramUserId, value)
-      setMessage('Membership ID saved.')
+      const draft = drafts[telegramUserId]
+      await api.updateMember(telegramUserId, {
+        membership_id: draft?.membership_id.trim() || null,
+        custom_name: draft?.custom_name.trim() || null,
+      })
+      setMessage('Member saved.')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setSavingId(null)
     }
+  }
+
+  function resetImport() {
+    setImportFileName(null)
+    setImportRows([])
+    setImportSkipped([])
+    setImportError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setMessage(null)
+    setError(null)
+    setImportError(null)
+    setImportFileName(file.name)
+    try {
+      const parsed = await parseMemberFile(file)
+      setImportRows(parsed.rows)
+      setImportSkipped(parsed.skipped)
+      if (parsed.rows.length === 0) {
+        setImportError('No importable rows found in this file.')
+      }
+    } catch (err) {
+      setImportRows([])
+      setImportSkipped([])
+      setImportError(err instanceof Error ? err.message : 'Could not read this file')
+    }
+  }
+
+  async function runImport() {
+    if (importRows.length === 0) return
+    setImporting(true)
+    setMessage(null)
+    setError(null)
+    try {
+      const res = await api.importMembers(
+        importRows.map((r) => ({
+          telegram_user_id: r.telegram_user_id,
+          username: r.username,
+          custom_name: r.custom_name,
+          membership_id: r.membership_id,
+          display_name: r.display_name,
+        })),
+      )
+      const parts = [`${res.updated} updated`, `${res.created} created`]
+      if (res.skipped.length > 0) parts.push(`${res.skipped.length} skipped`)
+      setMessage(`Import finished: ${parts.join(', ')}.`)
+      resetImport()
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function updateDraft(
+    member: Member,
+    field: keyof MemberDraft,
+    value: string,
+  ) {
+    setDrafts((prev) => ({
+      ...prev,
+      [member.telegram_user_id]: {
+        ...(prev[member.telegram_user_id] ?? draftFor(member)),
+        [field]: value,
+      },
+    }))
   }
 
   async function saveSettings(e: FormEvent) {
@@ -337,12 +437,123 @@ export function SettingsPage() {
 
           <section className="settings-panel">
             <div className="settings-panel-head">
+              <h2>Import data</h2>
+              <p className="muted">
+                Bulk-assign custom names and membership IDs from a spreadsheet. Supports CSV, XLSX,
+                XLS, and ODS. Rows are matched on Telegram user ID, or on username when the ID is
+                blank. Empty cells leave the existing value untouched.
+              </p>
+            </div>
+
+            <div className="import-drop">
+              <input
+                ref={fileInputRef}
+                id="member-import-file"
+                type="file"
+                className="import-file-input"
+                accept={IMPORT_ACCEPT}
+                onChange={(e) => void handleImportFile(e)}
+              />
+              <label htmlFor="member-import-file" className="import-drop-label">
+                <strong>{importFileName ?? 'Choose a file'}</strong>
+                <span className="muted">CSV, XLSX, XLS or ODS</span>
+              </label>
+            </div>
+
+            {importError && (
+              <p className="error import-note">{importError}</p>
+            )}
+
+            {importRows.length > 0 && (
+              <div className="import-preview">
+                <div className="import-summary">
+                  <span className="status-chip status-on">{importRows.length} ready</span>
+                  {importSkipped.length > 0 && (
+                    <span className="status-chip status-warn">
+                      {importSkipped.length} skipped
+                    </span>
+                  )}
+                </div>
+
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Telegram ID</th>
+                        <th>Username</th>
+                        <th>Custom name</th>
+                        <th>Membership ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.slice(0, 5).map((r) => (
+                        <tr key={r.row}>
+                          <td data-label="Telegram ID" className="mono">
+                            {r.telegram_user_id || <span className="muted">—</span>}
+                          </td>
+                          <td data-label="Username">
+                            {r.username ? `@${r.username}` : <span className="muted">—</span>}
+                          </td>
+                          <td data-label="Custom name">
+                            {r.custom_name || <span className="muted">—</span>}
+                          </td>
+                          <td data-label="Membership ID">
+                            {r.membership_id || <span className="muted">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {importRows.length > 5 && (
+                  <p className="muted import-note">
+                    Showing the first 5 of {importRows.length} rows.
+                  </p>
+                )}
+
+                {importSkipped.length > 0 && (
+                  <ul className="import-skipped muted">
+                    {importSkipped.slice(0, 5).map((s) => (
+                      <li key={s.row}>
+                        Row {s.row}: {s.reason}
+                      </li>
+                    ))}
+                    {importSkipped.length > 5 && (
+                      <li>…and {importSkipped.length - 5} more.</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className="settings-panel-actions button-row">
+              <button
+                type="button"
+                disabled={importing || importRows.length === 0}
+                onClick={() => void runImport()}
+              >
+                {importing ? 'Importing…' : `Import ${importRows.length || ''} members`.trim()}
+              </button>
+              <button type="button" className="secondary" onClick={downloadMemberTemplate}>
+                Download example CSV
+              </button>
+              {(importFileName || importError) && (
+                <button type="button" className="danger" onClick={resetImport}>
+                  Clear
+                </button>
+              )}
+            </div>
+          </section>
+
+          <section className="settings-panel">
+            <div className="settings-panel-head">
               <div className="settings-panel-title-row">
                 <h2>Members</h2>
                 <span className="status-chip status-neutral">{members.length} total</span>
               </div>
               <p className="muted">
-                Assign a membership ID to each Telegram user. Typed manually by the admin.
+                Assign a membership ID and an optional custom name to each Telegram user. Typed
+                manually by the admin.
               </p>
             </div>
 
@@ -351,7 +562,7 @@ export function SettingsPage() {
               <input
                 value={memberQuery}
                 onChange={(e) => setMemberQuery(e.target.value)}
-                placeholder="Name, @username, Telegram ID, membership ID…"
+                placeholder="Name, @username, Telegram ID, membership ID, custom name…"
               />
             </label>
 
@@ -361,6 +572,7 @@ export function SettingsPage() {
                   <tr>
                     <th>Member</th>
                     <th>Telegram ID</th>
+                    <th>Custom name</th>
                     <th>Membership ID</th>
                     <th aria-label="Actions" />
                   </tr>
@@ -368,7 +580,7 @@ export function SettingsPage() {
                 <tbody>
                   {filteredMembers.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="muted empty-cell">
+                      <td colSpan={5} className="muted empty-cell">
                         {members.length === 0
                           ? 'No members yet. They appear when people message in tracked groups.'
                           : 'No members match your search.'}
@@ -376,8 +588,10 @@ export function SettingsPage() {
                     </tr>
                   )}
                   {filteredMembers.map((m) => {
+                    const draft = drafts[m.telegram_user_id] ?? draftFor(m)
                     const dirty =
-                      (drafts[m.telegram_user_id] ?? '') !== (m.membership_id ?? '')
+                      draft.membership_id !== (m.membership_id ?? '') ||
+                      draft.custom_name !== (m.custom_name ?? '')
                     return (
                       <tr key={m.telegram_user_id} className={dirty ? 'row-dirty' : undefined}>
                         <td data-label="Member">
@@ -389,15 +603,17 @@ export function SettingsPage() {
                         <td data-label="Telegram ID" className="mono">
                           {m.telegram_user_id}
                         </td>
+                        <td data-label="Custom name">
+                          <input
+                            value={draft.custom_name}
+                            onChange={(e) => updateDraft(m, 'custom_name', e.target.value)}
+                            placeholder="e.g. Ahmad from Sales"
+                          />
+                        </td>
                         <td data-label="Membership ID">
                           <input
-                            value={drafts[m.telegram_user_id] ?? ''}
-                            onChange={(e) =>
-                              setDrafts((prev) => ({
-                                ...prev,
-                                [m.telegram_user_id]: e.target.value,
-                              }))
-                            }
+                            value={draft.membership_id}
+                            onChange={(e) => updateDraft(m, 'membership_id', e.target.value)}
                             placeholder="e.g. EMP-001"
                           />
                         </td>
@@ -406,7 +622,7 @@ export function SettingsPage() {
                             type="button"
                             className={dirty ? undefined : 'secondary'}
                             disabled={savingId === m.telegram_user_id || !dirty}
-                            onClick={() => saveMembership(m.telegram_user_id)}
+                            onClick={() => saveMember(m.telegram_user_id)}
                           >
                             {savingId === m.telegram_user_id ? 'Saving…' : 'Save'}
                           </button>
