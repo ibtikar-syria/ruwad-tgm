@@ -1,6 +1,7 @@
 import { Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { ThemeToggle } from './ThemeToggle'
 
 export function RequireAuth() {
   const [state, setState] = useState<'loading' | 'ok' | 'no'>('loading')
@@ -47,6 +48,7 @@ export function AppShell() {
       <header className="topnav">
         <div className="topnav-bar">
           <div className="brand">Group Manager</div>
+          <ThemeToggle />
           <button
             type="button"
             className="nav-toggle"

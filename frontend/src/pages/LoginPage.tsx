@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -47,6 +48,9 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <form className="login-form" onSubmit={onSubmit}>
         <h1>Group Manager</h1>
         <p className="muted">Enter the admin secret to continue.</p>
