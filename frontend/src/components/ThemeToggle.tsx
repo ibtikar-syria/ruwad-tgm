@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { useI18n, type TranslationKey } from '../i18n/context'
 import { useTheme, type ThemePreference } from '../theme'
 
 function MonitorIcon() {
@@ -30,17 +31,18 @@ function MoonIcon() {
   )
 }
 
-const OPTIONS: { value: ThemePreference; label: string; icon: () => ReactElement }[] = [
-  { value: 'system', label: 'System', icon: MonitorIcon },
-  { value: 'light', label: 'Light', icon: SunIcon },
-  { value: 'dark', label: 'Dark', icon: MoonIcon },
+const OPTIONS: { value: ThemePreference; label: TranslationKey; icon: () => ReactElement }[] = [
+  { value: 'system', label: 'theme.system', icon: MonitorIcon },
+  { value: 'light', label: 'theme.light', icon: SunIcon },
+  { value: 'dark', label: 'theme.dark', icon: MoonIcon },
 ]
 
 export function ThemeToggle() {
   const { preference, setPreference } = useTheme()
+  const { t } = useI18n()
 
   return (
-    <div className="theme-toggle" role="group" aria-label="Color theme">
+    <div className="theme-toggle" role="group" aria-label={t('theme.label')}>
       {OPTIONS.map(({ value, label, icon: Icon }) => {
         const active = preference === value
         return (
@@ -49,8 +51,8 @@ export function ThemeToggle() {
             type="button"
             className={active ? 'active' : undefined}
             aria-pressed={active}
-            aria-label={`${label} theme`}
-            title={`${label} theme`}
+            aria-label={t(label)}
+            title={t(label)}
             onClick={() => setPreference(value)}
           >
             <Icon />

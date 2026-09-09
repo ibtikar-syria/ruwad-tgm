@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../api'
 import { StatusBanner } from '../../components/StatusBanner'
+import { useI18n, useTranslateRef } from '../../i18n/context'
 
 function settingIsOn(value: string | undefined): boolean {
   const v = (value ?? '').trim().toLowerCase()
@@ -9,6 +10,8 @@ function settingIsOn(value: string | undefined): boolean {
 }
 
 export function GeneralSettings() {
+  const { t } = useI18n()
+  const tRef = useTranslateRef()
   const [appName, setAppName] = useState('')
   const [pollViaBot, setPollViaBot] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -26,7 +29,7 @@ export function GeneralSettings() {
         setPollViaBot(settingIsOn(res.settings.poll_via_bot))
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load settings')
+          setError(err instanceof Error ? err.message : tRef.current('general.loadFailed'))
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -35,7 +38,7 @@ export function GeneralSettings() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [tRef])
 
   async function saveSettings(e: FormEvent) {
     e.preventDefault()
@@ -50,13 +53,13 @@ export function GeneralSettings() {
 
       let hint: ReactNode = null
       if (pollViaBot && res.webhook_refreshed) {
-        hint = ' Webhook refreshed so poll votes can be tracked.'
+        hint = ` ${t('general.webhookRefreshed')}`
       } else if (pollViaBot && res.webhook_error) {
         hint = (
           <>
             {' '}
-            Warning: could not refresh the webhook ({res.webhook_error}). Fix it on the{' '}
-            <Link to="../telegram">Telegram tab</Link>.
+            {t('general.webhookWarn', { error: res.webhook_error })}{' '}
+            <Link to="../telegram">{t('general.telegramTab')}</Link>.
           </>
         )
       } else if (pollViaBot && res.webhook_refreshed === undefined) {
@@ -64,27 +67,27 @@ export function GeneralSettings() {
         hint = (
           <>
             {' '}
-            Set the webhook on the <Link to="../telegram">Telegram tab</Link> so poll answers are
-            received.
+            {t('general.webhookMissing')} <Link to="../telegram">{t('general.telegramTab')}</Link>{' '}
+            {t('general.webhookMissingTail')}
           </>
         )
       }
 
       setMessage(
         <>
-          Settings saved.
+          {t('general.saved')}
           {hint}
         </>,
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+      setError(err instanceof Error ? err.message : t('general.saveFailed'))
     } finally {
       setSaving(false)
     }
   }
 
   if (loading) {
-    return <p className="muted settings-loading">Loading settings…</p>
+    return <p className="muted settings-loading">{t('common.loading')}</p>
   }
 
   return (
@@ -93,12 +96,12 @@ export function GeneralSettings() {
 
       <form className="settings-panel" onSubmit={saveSettings}>
         <div className="settings-panel-head">
-          <h2>General</h2>
-          <p className="muted">App identity and poll behavior.</p>
+          <h2>{t('general.heading')}</h2>
+          <p className="muted">{t('general.desc')}</p>
         </div>
 
         <label className="field">
-          <span className="field-label">Display name</span>
+          <span className="field-label">{t('general.displayName')}</span>
           <input
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
@@ -109,23 +112,19 @@ export function GeneralSettings() {
         <div className="feature-row">
           <div className="feature-copy">
             <div className="feature-title-row">
-              <strong>Poll via Bot</strong>
+              <strong>{t('general.pollViaBot')}</strong>
               <span className={`status-chip ${pollViaBot ? 'status-on' : 'status-off'}`}>
-                {pollViaBot ? 'On' : 'Off'}
+                {pollViaBot ? t('general.on') : t('general.off')}
               </span>
             </div>
-            <p className="muted feature-desc">
-              Delete member polls and re-send them as public bot polls so votes can be tracked. The
-              bot needs admin rights with <strong>Delete messages</strong>. Saving while enabled
-              refreshes the webhook for <code>poll_answer</code>.
-            </p>
+            <p className="muted feature-desc">{t('general.pollViaBotDesc')}</p>
           </div>
           <label className="switch">
             <input
               type="checkbox"
               checked={pollViaBot}
               onChange={(e) => setPollViaBot(e.target.checked)}
-              aria-label="Enable Poll via Bot"
+              aria-label={t('general.enableAria')}
             />
             <span className="switch-track" aria-hidden="true" />
           </label>
@@ -133,7 +132,7 @@ export function GeneralSettings() {
 
         <div className="settings-panel-actions">
           <button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Save general settings'}
+            {saving ? t('common.saving') : t('general.save')}
           </button>
         </div>
       </form>

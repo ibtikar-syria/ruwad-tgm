@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, type ChatMessage, type Group, type Topic } from '../api'
 import { PollCard } from '../components/PollCard'
+import { useI18n, type I18nValue } from '../i18n/context'
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, locale: string): string {
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -27,10 +28,10 @@ function formatMessageJson(raw: string): string {
   }
 }
 
-function topicLabel(topic: Topic): string {
+function topicLabel(topic: Topic, t: I18nValue['t']): string {
   if (topic.title?.trim()) return topic.title
-  if (topic.is_general || topic.message_thread_id === '1') return 'General'
-  return `Topic ${topic.message_thread_id}`
+  if (topic.is_general || topic.message_thread_id === '1') return t('chats.general')
+  return t('chats.topicNumber', { id: topic.message_thread_id })
 }
 
 function isForumChat(chat: Group): boolean {
@@ -38,6 +39,7 @@ function isForumChat(chat: Group): boolean {
 }
 
 export function ChatsPage() {
+  const { t, dir, locale } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedChatId = searchParams.get('chat')
   const selectedThreadId = searchParams.get('thread')
@@ -59,7 +61,7 @@ export function ChatsPage() {
       setChats(res.groups)
       return res.groups
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chats')
+      setError(err instanceof Error ? err.message : t('chats.loadFailed'))
       return null
     } finally {
       setLoadingChats(false)
@@ -88,7 +90,7 @@ export function ChatsPage() {
       })
       setMessages(res.messages)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load messages')
+      setError(err instanceof Error ? err.message : t('chats.messagesFailed'))
     } finally {
       if (!opts?.quiet) setLoadingMessages(false)
     }
@@ -124,7 +126,7 @@ export function ChatsPage() {
       setChats(groups.groups)
       await loadMessages(selectedChatId, selectedThreadId, groups.groups, { quiet: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh')
+      setError(err instanceof Error ? err.message : t('chats.refreshFailed'))
     } finally {
       setRefreshing(false)
     }
@@ -141,7 +143,7 @@ export function ChatsPage() {
 
   const selected = chats.find((g) => g.chat_id === selectedChatId) ?? null
   const selectedTopic =
-    selected?.topics.find((t) => t.message_thread_id === selectedThreadId) ?? null
+    selected?.topics.find((topic) => topic.message_thread_id === selectedThreadId) ?? null
   const selectedIsForum = Boolean(selected && isForumChat(selected))
 
   function setSelection(chatId: string | null, threadId: string | null) {
@@ -173,9 +175,9 @@ export function ChatsPage() {
 
   const headerTitle = selected
     ? selectedIsForum && selectedTopic
-      ? `${selected.title || selected.chat_id} · ${topicLabel(selectedTopic)}`
+      ? `${selected.title || selected.chat_id} · ${topicLabel(selectedTopic, t)}`
       : selected.title || selected.chat_id
-    : 'Select a chat'
+    : t('chats.select')
 
   // On mobile, show only the message pane once a concrete chat/topic is open
   const chatOpenOnMobile =
@@ -188,10 +190,10 @@ export function ChatsPage() {
   return (
     <div className={`groups-layout${chatOpenOnMobile ? ' chat-open' : ''}`}>
       <aside className="group-list">
-        <div className="pane-header">Chats</div>
-        {loadingChats && <p className="muted pad">Loading…</p>}
+        <div className="pane-header">{t('chats.pane')}</div>
+        {loadingChats && <p className="muted pad">{t('common.loading')}</p>}
         {!loadingChats && chats.length === 0 && (
-          <p className="muted pad">No chats yet. Add the bot to a Telegram group.</p>
+          <p className="muted pad">{t('chats.empty')}</p>
         )}
         <ul>
           {chats.map((g) => {
@@ -215,12 +217,14 @@ export function ChatsPage() {
                       <span className="group-title">{g.title || g.chat_id}</span>
                       <span className="group-sub muted">
                         {forum
-                          ? `${g.topics.length} topic${g.topics.length === 1 ? '' : 's'}`
+                          ? g.topics.length === 1
+                            ? t('chats.topicsOne')
+                            : t('chats.topicsMany', { count: g.topics.length })
                           : g.is_active
                             ? g.username
                               ? `@${g.username}`
-                              : 'Chat'
-                            : 'Inactive'}
+                              : t('chats.chat')
+                            : t('chats.inactive')}
                       </span>
                     </span>
                   </button>
@@ -228,17 +232,17 @@ export function ChatsPage() {
                     <button
                       type="button"
                       className="topic-toggle"
-                      aria-label={expanded ? 'Collapse topics' : 'Expand topics'}
+                      aria-label={expanded ? t('chats.collapseTopics') : t('chats.expandTopics')}
                       onClick={() => toggleForum(g.chat_id)}
                     >
-                      {expanded ? '▾' : '▸'}
+                      {expanded ? '▾' : dir === 'rtl' ? '◂' : '▸'}
                     </button>
                   )}
                 </div>
                 {forum && expanded && (
                   <ul className="topic-list">
                     {g.topics.length === 0 && (
-                      <li className="muted pad-sm">No topics discovered yet.</li>
+                      <li className="muted pad-sm">{t('chats.noTopics')}</li>
                     )}
                     {g.topics.map((topic) => {
                       const active =
@@ -252,7 +256,7 @@ export function ChatsPage() {
                             onClick={() => selectTopic(g, topic)}
                           >
                             <span className="topic-hash">#</span>
-                            <span className="topic-title">{topicLabel(topic)}</span>
+                            <span className="topic-title">{topicLabel(topic, t)}</span>
                           </button>
                         </li>
                       )
@@ -272,9 +276,9 @@ export function ChatsPage() {
               type="button"
               className="chat-back-btn"
               onClick={backToChatList}
-              aria-label="Back to chats"
+              aria-label={t('chats.back')}
             >
-              ←
+              {dir === 'rtl' ? '→' : '←'}
             </button>
             <span className="chat-header-title">{headerTitle}</span>
           </div>
@@ -284,36 +288,36 @@ export function ChatsPage() {
               className="chat-refresh-btn"
               disabled={refreshing || loadingMessages}
               onClick={() => void refreshOpenChat()}
-              title="Refresh messages"
+              title={t('chats.refreshTitle')}
             >
-              {refreshing ? 'Refreshing…' : 'Refresh'}
+              {refreshing ? t('chats.refreshing') : t('chats.refresh')}
             </button>
           )}
         </div>
         {error && <p className="error pad">{error}</p>}
         <div className="message-scroll">
-          {!selectedChatId && <p className="muted pad">Select a chat to view messages.</p>}
+          {!selectedChatId && <p className="muted pad">{t('chats.selectToView')}</p>}
           {selectedIsForum && selectedChatId && !selectedThreadId && (
-            <p className="muted pad">Select a topic to view messages.</p>
+            <p className="muted pad">{t('chats.selectTopic')}</p>
           )}
-          {loadingMessages && <p className="muted pad">Loading messages…</p>}
+          {loadingMessages && <p className="muted pad">{t('chats.loadingMessages')}</p>}
           {!loadingMessages &&
             selected &&
             (!selectedIsForum || selectedThreadId) &&
             messages.length === 0 && (
-              <p className="muted pad">No messages stored yet.</p>
+              <p className="muted pad">{t('chats.noMessages')}</p>
             )}
           {messages.map((m) => (
             <article key={m.id} className="bubble">
               <header className="bubble-head">
                 <strong>{m.display_name}</strong>
                 {m.membership_id && <span className="badge">{m.membership_id}</span>}
-                <time>{formatTime(m.created_at)}</time>
+                <time>{formatTime(m.created_at, locale)}</time>
                 <button
                   type="button"
                   className="msg-info-btn"
-                  title="View message JSON"
-                  aria-label="View message JSON"
+                  title={t('chats.viewJson')}
+                  aria-label={t('chats.viewJson')}
                   onClick={() => setJsonMessage(m)}
                 >
                   i
@@ -321,13 +325,17 @@ export function ChatsPage() {
               </header>
               {m.reply_to && (
                 <div className="reply-preview">
-                  Reply: {m.reply_to.text || `#${m.reply_to.message_id}`}
+                  {t('chats.reply', {
+                    text: m.reply_to.text || `#${m.reply_to.message_id}`,
+                  })}
                 </div>
               )}
               {m.poll ? (
                 <PollCard poll={m.poll} />
               ) : (
-                <p className="bubble-text">{m.text || <em className="muted">(no text)</em>}</p>
+                <p className="bubble-text">
+                  {m.text || <em className="muted">{t('chats.noText')}</em>}
+                </p>
               )}
             </article>
           ))}
@@ -348,17 +356,17 @@ export function ChatsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="json-modal-header">
-              <h2 id="json-modal-title">Message JSON</h2>
+              <h2 id="json-modal-title">{t('chats.jsonTitle')}</h2>
               <button
                 type="button"
                 className="linkish"
                 onClick={() => setJsonMessage(null)}
               >
-                Close
+                {t('common.close')}
               </button>
             </div>
             <p className="muted json-modal-meta">
-              DB id: <span className="mono">{jsonMessage.id}</span>
+              {t('chats.dbId')} <span className="mono">{jsonMessage.id}</span>
             </p>
             <pre className="json-modal-body">{formatMessageJson(jsonMessage.message_json)}</pre>
           </div>

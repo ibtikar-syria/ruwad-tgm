@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../../api'
 import { StatusBanner } from '../../components/StatusBanner'
+import { useI18n, useTranslateRef } from '../../i18n/context'
 
 type WebhookStatus = {
   url: string
@@ -11,6 +12,8 @@ type WebhookStatus = {
 }
 
 export function TelegramSettings() {
+  const { t } = useI18n()
+  const tRef = useTranslateRef()
   const [webhookUrl, setWebhookUrl] = useState('')
   const [status, setStatus] = useState<WebhookStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -34,7 +37,7 @@ export function TelegramSettings() {
         setWebhookUrl(res.webhook.url || res.suggested_url)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load webhook status')
+          setError(err instanceof Error ? err.message : tRef.current('telegram.loadFailed'))
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -43,7 +46,7 @@ export function TelegramSettings() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [tRef])
 
   const connected = Boolean(status?.url)
   const hasError = Boolean(status?.last_error_message)
@@ -57,9 +60,9 @@ export function TelegramSettings() {
       const res = await api.setWebhook(webhookUrl.trim() || undefined)
       setStatus(res.webhook)
       setWebhookUrl(res.url)
-      setMessage('Telegram webhook set.')
+      setMessage(t('telegram.setOk'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set webhook')
+      setError(err instanceof Error ? err.message : t('telegram.setFailed'))
     } finally {
       setBusy(false)
     }
@@ -71,16 +74,16 @@ export function TelegramSettings() {
     setError(null)
     try {
       await fetchWebhook()
-      setMessage('Webhook status refreshed.')
+      setMessage(t('telegram.refreshedOk'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh webhook')
+      setError(err instanceof Error ? err.message : t('telegram.refreshFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   async function removeWebhook() {
-    if (!confirm('Remove the Telegram webhook? The bot will stop receiving updates.')) {
+    if (!confirm(t('telegram.confirmRemove'))) {
       return
     }
     setBusy(true)
@@ -89,16 +92,16 @@ export function TelegramSettings() {
     try {
       await api.deleteWebhook()
       await fetchWebhook()
-      setMessage('Telegram webhook removed.')
+      setMessage(t('telegram.removedOk'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove webhook')
+      setError(err instanceof Error ? err.message : t('telegram.removeFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   if (loading) {
-    return <p className="muted settings-loading">Loading webhook status…</p>
+    return <p className="muted settings-loading">{t('telegram.loading')}</p>
   }
 
   return (
@@ -108,23 +111,24 @@ export function TelegramSettings() {
       <form className="settings-panel" onSubmit={applyWebhook}>
         <div className="settings-panel-head">
           <div className="settings-panel-title-row">
-            <h2>Telegram webhook</h2>
+            <h2>{t('telegram.heading')}</h2>
             <span
               className={`status-chip ${
                 !connected ? 'status-off' : hasError ? 'status-warn' : 'status-on'
               }`}
             >
-              {!connected ? 'Not set' : hasError ? 'Error' : 'Connected'}
+              {!connected
+                ? t('telegram.notSet')
+                : hasError
+                  ? t('telegram.error')
+                  : t('telegram.connected')}
             </span>
           </div>
-          <p className="muted">
-            Point Telegram at this backend so messages, reactions, and poll votes are ingested. URL
-            must be HTTPS. Secret comes from <code>TELEGRAM_WEBHOOK_SECRET</code>.
-          </p>
+          <p className="muted">{t('telegram.desc')}</p>
         </div>
 
         <label className="field">
-          <span className="field-label">Webhook URL</span>
+          <span className="field-label">{t('telegram.url')}</span>
           <input
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
@@ -135,22 +139,24 @@ export function TelegramSettings() {
 
         <div className="meta-grid">
           <div className="meta-item">
-            <span className="meta-label">Current URL</span>
-            <span className="meta-value mono">{status?.url || '—'}</span>
+            <span className="meta-label">{t('telegram.currentUrl')}</span>
+            <span className="meta-value mono">{status?.url || t('common.empty')}</span>
           </div>
           <div className="meta-item">
-            <span className="meta-label">Pending updates</span>
-            <span className="meta-value">{status ? status.pending_update_count : '—'}</span>
+            <span className="meta-label">{t('telegram.pending')}</span>
+            <span className="meta-value">
+              {status ? status.pending_update_count : t('common.empty')}
+            </span>
           </div>
           {status?.last_error_message && (
             <div className="meta-item meta-item-wide">
-              <span className="meta-label">Last error</span>
+              <span className="meta-label">{t('telegram.lastError')}</span>
               <span className="meta-value error">{status.last_error_message}</span>
             </div>
           )}
           {status?.allowed_updates && status.allowed_updates.length > 0 && (
             <div className="meta-item meta-item-wide">
-              <span className="meta-label">Allowed updates</span>
+              <span className="meta-label">{t('telegram.allowedUpdates')}</span>
               <div className="tag-row">
                 {status.allowed_updates.map((u) => (
                   <span key={u} className="tag">
@@ -164,10 +170,10 @@ export function TelegramSettings() {
 
         <div className="settings-panel-actions button-row">
           <button type="submit" disabled={busy}>
-            {busy ? 'Working…' : 'Set webhook'}
+            {busy ? t('common.working') : t('telegram.set')}
           </button>
           <button type="button" className="secondary" disabled={busy} onClick={refreshWebhook}>
-            Refresh status
+            {t('telegram.refreshStatus')}
           </button>
           <button
             type="button"
@@ -175,7 +181,7 @@ export function TelegramSettings() {
             disabled={busy || !connected}
             onClick={removeWebhook}
           >
-            Remove
+            {t('common.remove')}
           </button>
         </div>
       </form>

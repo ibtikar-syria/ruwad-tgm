@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { api, type MessagePoll } from '../api'
 import { type ExportFormat } from '../exportAnalytics'
 import { exportPollVotesSheet } from '../exportPollVotes'
+import { useI18n } from '../i18n/context'
 
 export function PollCard({ poll: initial }: { poll: MessagePoll }) {
+  const { t } = useI18n()
   const [poll, setPoll] = useState(initial)
   const [exporting, setExporting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -28,9 +30,9 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
     try {
       const res = await api.refreshPoll(poll.id)
       setPoll(res.poll)
-      setHint('Poll totals refreshed from Telegram.')
+      setHint(t('poll.refreshed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Refresh failed')
+      setError(err instanceof Error ? err.message : t('poll.refreshFailed'))
     } finally {
       setRefreshing(false)
     }
@@ -42,12 +44,12 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
     try {
       const res = await api.poll(poll.id)
       setPoll(res.poll)
-      exportPollVotesSheet(res.poll, res.poll.votes ?? [], format)
+      exportPollVotesSheet(res.poll, res.poll.votes ?? [], format, t)
     } catch (err) {
       try {
-        exportPollVotesSheet(poll, poll.votes ?? [], format)
+        exportPollVotesSheet(poll, poll.votes ?? [], format, t)
       } catch {
-        setError(err instanceof Error ? err.message : 'Export failed')
+        setError(err instanceof Error ? err.message : t('poll.exportFailed'))
       }
     } finally {
       setExporting(false)
@@ -83,16 +85,13 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
         })}
       </ul>
       <div className="poll-footer muted">
-        {total} vote{total === 1 ? '' : 's'}
-        {poll.allows_multiple_answers ? ' · multiple answers' : ''}
-        {poll.is_anonymous ? ' · anonymous' : ' · public votes'}
-        {poll.is_closed ? ' · closed' : ''}
+        {total === 1 ? t('poll.votesOne') : t('poll.votesMany', { count: total })}
+        {poll.allows_multiple_answers ? ` · ${t('poll.multiple')}` : ''}
+        {poll.is_anonymous ? ` · ${t('poll.anonymous')}` : ` · ${t('poll.public')}`}
+        {poll.is_closed ? ` · ${t('poll.closed')}` : ''}
       </div>
       {!hasNamedVotes && (
-        <p className="poll-hint muted">
-          Refresh pulls current option totals from Telegram. Named voters only
-          appear for public polls created with <code>/poll</code>.
-        </p>
+        <p className="poll-hint muted">{t('poll.hint')}</p>
       )}
       <div className="poll-export">
         <button
@@ -101,19 +100,19 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
           disabled={refreshing}
           onClick={() => void handleRefresh()}
         >
-          {refreshing ? 'Refreshing…' : 'Refresh votes'}
+          {refreshing ? t('chats.refreshing') : t('poll.refreshVotes')}
         </button>
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value as ExportFormat)}
-          aria-label="Export format"
+          aria-label={t('poll.exportFormat')}
         >
           <option value="xlsx">Excel</option>
           <option value="ods">ODS</option>
           <option value="csv">CSV</option>
         </select>
         <button type="button" disabled={exporting} onClick={() => void handleExport()}>
-          {exporting ? 'Exporting…' : 'Export votes'}
+          {exporting ? t('analytics.exporting') : t('poll.exportVotes')}
         </button>
       </div>
       {hint && <p className="ok">{hint}</p>}

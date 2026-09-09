@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api, type AnalyticsRow, type Group } from '../api'
 import { exportAnalyticsSheet, type ExportFormat } from '../exportAnalytics'
+import { useI18n } from '../i18n/context'
 
 export function AnalyticsPage() {
+  const { t } = useI18n()
   const [groups, setGroups] = useState<Group[]>([])
   const [chatId, setChatId] = useState<string>('')
   const [rows, setRows] = useState<AnalyticsRow[]>([])
@@ -30,7 +32,7 @@ export function AnalyticsPage() {
         if (!cancelled) setRows(res.analytics)
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load analytics')
+        if (!cancelled) setError(err instanceof Error ? err.message : t('analytics.loadFailed'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -52,9 +54,9 @@ export function AnalyticsPage() {
       // Refresh so the sheet matches the latest server data for the selected scope
       const res = await api.analytics(chatId || undefined)
       setRows(res.analytics)
-      exportAnalyticsSheet(res.analytics, format, scopeLabel)
+      exportAnalyticsSheet(res.analytics, format, scopeLabel, t)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed')
+      setError(err instanceof Error ? err.message : t('analytics.exportFailed'))
     } finally {
       setExporting(false)
     }
@@ -64,18 +66,16 @@ export function AnalyticsPage() {
     <div className="section-page">
       <header className="page-header">
         <div>
-          <h1>Analytics</h1>
-          <p className="page-subtitle">
-            Message, reply, and reaction counts by member. Export the current scope to a spreadsheet.
-          </p>
+          <h1>{t('analytics.title')}</h1>
+          <p className="page-subtitle">{t('analytics.subtitle')}</p>
         </div>
       </header>
       <div className="section-toolbar">
         <div className="toolbar-actions">
           <label className="inline-label">
-            Group
+            {t('analytics.group')}
             <select value={chatId} onChange={(e) => setChatId(e.target.value)}>
-              <option value="">All groups</option>
+              <option value="">{t('analytics.allGroups')}</option>
               {groups.map((g) => (
                 <option key={g.chat_id} value={g.chat_id}>
                   {g.title || g.chat_id}
@@ -84,14 +84,14 @@ export function AnalyticsPage() {
             </select>
           </label>
           <label className="inline-label">
-            Export as
+            {t('analytics.exportAs')}
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value as ExportFormat)}
             >
-              <option value="xlsx">Excel (.xlsx)</option>
-              <option value="ods">OpenDocument (.ods)</option>
-              <option value="csv">CSV (.csv)</option>
+              <option value="xlsx">{t('analytics.formatXlsx')}</option>
+              <option value="ods">{t('analytics.formatOds')}</option>
+              <option value="csv">{t('analytics.formatCsv')}</option>
             </select>
           </label>
           <button
@@ -99,48 +99,48 @@ export function AnalyticsPage() {
             disabled={loading || exporting}
             onClick={() => void handleExport()}
           >
-            {exporting ? 'Exporting…' : 'Export sheet'}
+            {exporting ? t('analytics.exporting') : t('analytics.export')}
           </button>
         </div>
       </div>
 
       {error && <p className="error">{error}</p>}
-      {loading && <p className="muted">Loading…</p>}
+      {loading && <p className="muted">{t('common.loading')}</p>}
 
       {!loading && (
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Member</th>
-                <th>Membership ID</th>
-                <th>Messages</th>
-                <th>Replies</th>
-                <th>Reactions</th>
+                <th>{t('column.member')}</th>
+                <th>{t('column.membershipId')}</th>
+                <th>{t('column.messages')}</th>
+                <th>{t('column.replies')}</th>
+                <th>{t('column.reactions')}</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="muted empty-cell">
-                    No member activity yet.
+                    {t('analytics.empty')}
                   </td>
                 </tr>
               )}
               {rows.map((r) => (
                 <tr key={r.telegram_user_id}>
-                  <td data-label="Member">
+                  <td data-label={t('column.member')}>
                     <div className="cell-stack">
                       <strong>{r.display_name || r.telegram_user_id}</strong>
                       {r.username && <span className="muted">@{r.username}</span>}
                     </div>
                   </td>
-                  <td data-label="Membership ID">
-                    {r.membership_id || <span className="muted">unassigned</span>}
+                  <td data-label={t('column.membershipId')}>
+                    {r.membership_id || <span className="muted">{t('analytics.unassigned')}</span>}
                   </td>
-                  <td data-label="Messages">{r.messages_count}</td>
-                  <td data-label="Replies">{r.replies_count}</td>
-                  <td data-label="Reactions">{r.reactions_count}</td>
+                  <td data-label={t('column.messages')}>{r.messages_count}</td>
+                  <td data-label={t('column.replies')}>{r.replies_count}</td>
+                  <td data-label={t('column.reactions')}>{r.reactions_count}</td>
                 </tr>
               ))}
             </tbody>

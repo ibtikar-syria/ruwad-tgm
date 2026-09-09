@@ -5,7 +5,10 @@
  */
 :root {
   --radius: 10px;
-  --font: 'Segoe UI', 'IBM Plex Sans', system-ui, sans-serif;
+  /* Arabic faces trail the Latin ones: fallback is per-glyph, so Latin text
+     still renders in Segoe UI / IBM Plex Sans */
+  --font: 'Segoe UI', 'IBM Plex Sans', system-ui, 'Noto Sans Arabic',
+    'IBM Plex Sans Arabic', 'Segoe UI Arabic', sans-serif;
 
   color-scheme: dark;
   --bg: #0e1621;
@@ -335,7 +338,7 @@ button:focus-visible {
 .nav-toggle-bars::after {
   content: '';
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
 }
 
 .nav-toggle-bars::before {
@@ -385,7 +388,39 @@ button:focus-visible {
 }
 
 .topnav-logout {
-  margin-left: auto;
+  margin-inline-start: auto;
+}
+
+.lang-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--input-bg);
+}
+
+.lang-toggle button {
+  min-width: 2.1rem;
+  height: 1.85rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.lang-toggle button:hover {
+  color: var(--text);
+  background: var(--hover-soft);
+}
+
+.lang-toggle button.active {
+  color: var(--on-accent);
+  background: var(--accent);
 }
 
 .theme-toggle {
@@ -428,7 +463,9 @@ button:focus-visible {
 .login-theme {
   position: absolute;
   top: 1rem;
-  right: 1rem;
+  inset-inline-end: 1rem;
+  display: flex;
+  gap: 0.4rem;
 }
 
 .linkish {
@@ -469,7 +506,7 @@ button:focus-visible {
       var(--chat-stripe-a) 0 12px,
       var(--chat-stripe-b) 12px 24px
     );
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
 }
 
 .pane-header {
@@ -577,11 +614,12 @@ button:focus-visible {
   display: flex;
   gap: 0.5rem;
   align-items: center;
-  text-align: left;
+  text-align: start;
   background: transparent;
   color: var(--text);
   border-radius: 0;
-  padding: 0.45rem 1rem 0.45rem 3.4rem;
+  padding: 0.45rem 1rem;
+  padding-inline-start: 3.4rem;
   font-weight: 500;
 }
 
@@ -602,7 +640,8 @@ button:focus-visible {
 }
 
 .pad-sm {
-  padding: 0.4rem 1rem 0.6rem 3.4rem;
+  padding: 0.4rem 1rem 0.6rem;
+  padding-inline-start: 3.4rem;
   font-size: 0.85rem;
 }
 
@@ -611,7 +650,7 @@ button:focus-visible {
   display: flex;
   gap: 0.75rem;
   align-items: center;
-  text-align: left;
+  text-align: start;
   background: transparent;
   color: var(--text);
   border-radius: 0;
@@ -666,7 +705,8 @@ button:focus-visible {
   max-width: min(560px, 92%);
   align-self: flex-start;
   background: var(--bubble);
-  border-radius: 12px 12px 12px 4px;
+  border-radius: 12px;
+  border-end-start-radius: 4px;
   padding: 0.55rem 0.75rem 0.65rem;
   box-shadow: var(--bubble-shadow);
 }
@@ -685,7 +725,7 @@ button:focus-visible {
 }
 
 .bubble-head time {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--muted);
   font-size: 0.75rem;
 }
@@ -780,11 +820,13 @@ button:focus-visible {
 .reply-preview {
   font-size: 0.8rem;
   color: var(--muted);
-  border-left: 2px solid var(--accent);
+  border-inline-start: 2px solid var(--accent);
   background: var(--reply);
   padding: 0.35rem 0.5rem;
   margin: 0.25rem 0 0.4rem;
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
 }
 
 .bubble-text {
@@ -973,7 +1015,7 @@ table {
 
 th,
 td {
-  text-align: left;
+  text-align: start;
   padding: 0.75rem 0.85rem;
   border-bottom: 1px solid var(--panel-border);
   vertical-align: middle;
@@ -1189,7 +1231,7 @@ th {
   content: '';
   position: absolute;
   top: 3px;
-  left: 3px;
+  inset-inline-start: 3px;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -1354,7 +1396,7 @@ button.danger {
 
 .import-skipped {
   margin: 0;
-  padding-left: 1.1rem;
+  padding-inline-start: 1.1rem;
   font-size: 0.82rem;
   display: grid;
   gap: 0.2rem;
@@ -1395,9 +1437,9 @@ button.danger {
 
   .topnav-links a,
   .topnav-logout {
-    margin-left: 0;
+    margin-inline-start: 0;
     width: 100%;
-    text-align: left;
+    text-align: start;
     padding: 0.7rem 0.85rem;
     min-height: 2.75rem;
   }
@@ -1416,7 +1458,7 @@ button.danger {
   }
 
   .chat-pane {
-    border-left: 0;
+    border-inline-start: 0;
   }
 
   .chat-back-btn {
@@ -1425,11 +1467,11 @@ button.danger {
   }
 
   .topic-item {
-    padding-left: 2.25rem;
+    padding-inline-start: 2.25rem;
   }
 
   .pad-sm {
-    padding-left: 2.25rem;
+    padding-inline-start: 2.25rem;
   }
 
   .message-scroll {
@@ -1441,7 +1483,7 @@ button.danger {
   }
 
   .bubble-head time {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .section-page {
@@ -1602,3 +1644,8 @@ button.danger {
   }
 }
 
+
+/* The switch knob slides toward the inline end, which flips under RTL */
+[dir='rtl'] .switch input:checked + .switch-track::after {
+  transform: translateX(-18px);
+}

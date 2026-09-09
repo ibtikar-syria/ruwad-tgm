@@ -1,28 +1,29 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { useI18n, type TranslationKey } from '../../i18n/context'
 
-const TABS = [
-  { to: 'general', label: 'General' },
-  { to: 'telegram', label: 'Telegram' },
-  { to: 'members', label: 'Members' },
-  { to: 'import', label: 'Import data' },
-] as const
+const TABS: { to: string; label: TranslationKey }[] = [
+  { to: 'general', label: 'settings.tabGeneral' },
+  { to: 'telegram', label: 'settings.tabTelegram' },
+  { to: 'members', label: 'settings.tabMembers' },
+  { to: 'import', label: 'settings.tabImport' },
+]
 
 export function SettingsLayout() {
+  const { t } = useI18n()
+
   return (
     <div className="section-page settings-page">
       <header className="page-header">
         <div>
-          <h1>Settings</h1>
-          <p className="page-subtitle">
-            App configuration, Telegram connection, and member records.
-          </p>
+          <h1>{t('settings.title')}</h1>
+          <p className="page-subtitle">{t('settings.subtitle')}</p>
         </div>
       </header>
 
-      <nav className="settings-tabs" aria-label="Settings sections">
+      <nav className="settings-tabs" aria-label={t('settings.sections')}>
         {TABS.map((tab) => (
           <NavLink key={tab.to} to={tab.to}>
-            {tab.label}
+            {t(tab.label)}
           </NavLink>
         ))}
       </nav>

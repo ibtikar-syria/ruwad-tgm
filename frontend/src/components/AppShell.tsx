@@ -1,9 +1,12 @@
 import { Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useI18n } from '../i18n/context'
+import { LanguageToggle } from './LanguageToggle'
 import { ThemeToggle } from './ThemeToggle'
 
 export function RequireAuth() {
+  const { t } = useI18n()
   const [state, setState] = useState<'loading' | 'ok' | 'no'>('loading')
 
   useEffect(() => {
@@ -22,7 +25,7 @@ export function RequireAuth() {
   }, [])
 
   if (state === 'loading') {
-    return <div className="page-center muted">Checking session…</div>
+    return <div className="page-center muted">{t('auth.checking')}</div>
   }
   if (state === 'no') {
     return <Navigate to="/login" replace />
@@ -32,6 +35,7 @@ export function RequireAuth() {
 
 export function AppShell() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [menuOpen, setMenuOpen] = useState(false)
   const closeMenu = () => setMenuOpen(false)
 
@@ -47,12 +51,13 @@ export function AppShell() {
     <div className={`shell${menuOpen ? ' nav-open' : ''}`}>
       <header className="topnav">
         <div className="topnav-bar">
-          <div className="brand">Group Manager</div>
+          <div className="brand">{t('app.brand')}</div>
+          <LanguageToggle />
           <ThemeToggle />
           <button
             type="button"
             className="nav-toggle"
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-label={menuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
@@ -60,16 +65,16 @@ export function AppShell() {
           </button>
           <nav className="topnav-links">
             <NavLink to="/chats" onClick={closeMenu}>
-              Chats
+              {t('nav.chats')}
             </NavLink>
             <NavLink to="/analytics" onClick={closeMenu}>
-              Analytics
+              {t('nav.analytics')}
             </NavLink>
             <NavLink to="/settings" onClick={closeMenu}>
-              Settings
+              {t('nav.settings')}
             </NavLink>
             <button type="button" className="linkish topnav-logout" onClick={logout}>
-              Log out
+              {t('auth.logout')}
             </button>
           </nav>
         </div>

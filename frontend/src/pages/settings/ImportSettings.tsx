@@ -2,20 +2,36 @@ import { useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../api'
 import { StatusBanner } from '../../components/StatusBanner'
+import { useI18n, type I18nValue } from '../../i18n/context'
 import {
   downloadMemberTemplate,
   IMPORT_ACCEPT,
+  MemberFileError,
   parseMemberFile,
   type MemberImportRow,
+  type SkipReason,
+  type SkippedRow,
 } from '../../importMembers'
 
 const PREVIEW_LIMIT = 5
 
+function reasonText(reason: SkipReason, t: I18nValue['t']): string {
+  switch (reason.code) {
+    case 'invalidId':
+      return t('import.reasonInvalidId', { id: reason.id })
+    case 'noValues':
+      return t('import.reasonNoValues')
+    default:
+      return t('import.reasonMissingId')
+  }
+}
+
 export function ImportSettings() {
+  const { t } = useI18n()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [rows, setRows] = useState<MemberImportRow[]>([])
-  const [skipped, setSkipped] = useState<{ row: number; reason: string }[]>([])
+  const [skipped, setSkipped] = useState<SkippedRow[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [message, setMessage] = useState<ReactNode>(null)
@@ -41,12 +57,22 @@ export function ImportSettings() {
       setRows(parsed.rows)
       setSkipped(parsed.skipped)
       if (parsed.rows.length === 0) {
-        setParseError('No importable rows found in this file.')
+        setParseError(t('import.noRows'))
       }
     } catch (err) {
       setRows([])
       setSkipped([])
-      setParseError(err instanceof Error ? err.message : 'Could not read this file')
+      if (err instanceof MemberFileError) {
+        setParseError(
+          err.code === 'noSheets'
+            ? t('import.errorNoSheets')
+            : err.code === 'noIdColumn'
+              ? t('import.errorNoIdColumn')
+              : t('import.errorNoValueColumn'),
+        )
+      } else {
+        setParseError(t('import.readFailed'))
+      }
     }
   }
 
@@ -64,17 +90,23 @@ export function ImportSettings() {
           membership_id: r.membership_id,
         })),
       )
-      const parts = [`${res.updated} updated`, `${res.created} created`]
-      if (res.skipped.length > 0) parts.push(`${res.skipped.length} skipped`)
+      const parts = [
+        t('import.updated', { count: res.updated }),
+        t('import.created', { count: res.created }),
+      ]
+      if (res.skipped.length > 0) {
+        parts.push(t('import.skippedCount', { count: res.skipped.length }))
+      }
       setMessage(
         <>
-          Import finished: {parts.join(', ')}. Review them on the{' '}
-          <Link to="../members">Members tab</Link>.
+          {t('import.finished', { summary: parts.join(t('common.listSeparator')) })}{' '}
+          {t('import.review')}{' '}
+          <Link to="../members">{t('import.membersTab')}</Link>.
         </>,
       )
       reset()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed')
+      setError(err instanceof Error ? err.message : t('import.failed'))
     } finally {
       setImporting(false)
     }
@@ -86,14 +118,8 @@ export function ImportSettings() {
 
       <section className="settings-panel">
         <div className="settings-panel-head">
-          <h2>Import data</h2>
-          <p className="muted">
-            Bulk-assign custom names and membership IDs from a spreadsheet. Supports CSV, XLSX, XLS,
-            and ODS. Only the custom name and membership ID are written — the Telegram ID and
-            username are never modified, and empty cells leave the existing value untouched. Rows
-            are matched on Telegram user ID; a username is only used to look up the ID when that
-            cell is blank, since usernames can change.
-          </p>
+          <h2>{t('import.heading')}</h2>
+          <p className="muted">{t('import.desc')}</p>
         </div>
 
         <div className="import-drop">
@@ -106,8 +132,8 @@ export function ImportSettings() {
             onChange={(e) => void handleFile(e)}
           />
           <label htmlFor="member-import-file" className="import-drop-label">
-            <strong>{fileName ?? 'Choose a file'}</strong>
-            <span className="muted">CSV, XLSX, XLS or ODS</span>
+            <strong>{fileName ?? t('import.chooseFile')}</strong>
+            <span className="muted">{t('import.fileTypes')}</span>
           </label>
         </div>
 
@@ -116,9 +142,13 @@ export function ImportSettings() {
         {rows.length > 0 && (
           <div className="import-preview">
             <div className="import-summary">
-              <span className="status-chip status-on">{rows.length} ready</span>
+              <span className="status-chip status-on">
+                {t('import.ready', { count: rows.length })}
+              </span>
               {skipped.length > 0 && (
-                <span className="status-chip status-warn">{skipped.length} skipped</span>
+                <span className="status-chip status-warn">
+                  {t('import.skipped', { count: skipped.length })}
+                </span>
               )}
             </div>
 
@@ -126,26 +156,26 @@ export function ImportSettings() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Telegram ID</th>
-                    <th>Username</th>
-                    <th>Custom name</th>
-                    <th>Membership ID</th>
+                    <th>{t('column.telegramId')}</th>
+                    <th>{t('column.username')}</th>
+                    <th>{t('column.customName')}</th>
+                    <th>{t('column.membershipId')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.slice(0, PREVIEW_LIMIT).map((r) => (
                     <tr key={r.row}>
-                      <td data-label="Telegram ID" className="mono">
-                        {r.telegram_user_id || <span className="muted">—</span>}
+                      <td data-label={t('column.telegramId')} className="mono">
+                        {r.telegram_user_id || <span className="muted">{t('common.empty')}</span>}
                       </td>
-                      <td data-label="Username">
-                        {r.username ? `@${r.username}` : <span className="muted">—</span>}
+                      <td data-label={t('column.username')}>
+                        {r.username ? `@${r.username}` : <span className="muted">{t('common.empty')}</span>}
                       </td>
-                      <td data-label="Custom name">
-                        {r.custom_name || <span className="muted">—</span>}
+                      <td data-label={t('column.customName')}>
+                        {r.custom_name || <span className="muted">{t('common.empty')}</span>}
                       </td>
-                      <td data-label="Membership ID">
-                        {r.membership_id || <span className="muted">—</span>}
+                      <td data-label={t('column.membershipId')}>
+                        {r.membership_id || <span className="muted">{t('common.empty')}</span>}
                       </td>
                     </tr>
                   ))}
@@ -154,7 +184,7 @@ export function ImportSettings() {
             </div>
             {rows.length > PREVIEW_LIMIT && (
               <p className="muted import-note">
-                Showing the first {PREVIEW_LIMIT} of {rows.length} rows.
+                {t('import.showingFirst', { shown: PREVIEW_LIMIT, total: rows.length })}
               </p>
             )}
 
@@ -162,11 +192,11 @@ export function ImportSettings() {
               <ul className="import-skipped muted">
                 {skipped.slice(0, PREVIEW_LIMIT).map((s) => (
                   <li key={s.row}>
-                    Row {s.row}: {s.reason}
+                    {t('import.rowReason', { row: s.row, reason: reasonText(s.reason, t) })}
                   </li>
                 ))}
                 {skipped.length > PREVIEW_LIMIT && (
-                  <li>…and {skipped.length - PREVIEW_LIMIT} more.</li>
+                  <li>{t('import.andMore', { count: skipped.length - PREVIEW_LIMIT })}</li>
                 )}
               </ul>
             )}
@@ -179,14 +209,18 @@ export function ImportSettings() {
             disabled={importing || rows.length === 0}
             onClick={() => void runImport()}
           >
-            {importing ? 'Importing…' : `Import ${rows.length || ''} members`.trim()}
+            {importing
+              ? t('import.running')
+              : rows.length > 0
+                ? t('import.run', { count: rows.length })
+                : t('import.runEmpty')}
           </button>
-          <button type="button" className="secondary" onClick={downloadMemberTemplate}>
-            Download example CSV
+          <button type="button" className="secondary" onClick={() => downloadMemberTemplate(t)}>
+            {t('import.downloadExample')}
           </button>
           {(fileName || parseError) && (
             <button type="button" className="danger" onClick={reset}>
-              Clear
+              {t('common.clear')}
             </button>
           )}
         </div>

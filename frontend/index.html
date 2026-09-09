@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -7,16 +7,27 @@
     <meta name="color-scheme" content="dark light" />
     <title>Group Manager</title>
     <script>
-      // Resolve the theme before first paint so there is no flash of the wrong palette
+      // Resolve theme and language before first paint so there is no flash of
+      // the wrong palette or the wrong text direction
       (function () {
+        var root = document.documentElement
         try {
           var stored = localStorage.getItem('theme') || 'system'
           var dark =
             stored === 'dark' ||
             (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+          root.dataset.theme = dark ? 'dark' : 'light'
         } catch (e) {
-          document.documentElement.dataset.theme = 'dark'
+          root.dataset.theme = 'dark'
+        }
+        try {
+          var lang = localStorage.getItem('language')
+          if (lang !== 'en') lang = 'ar'
+          root.lang = lang
+          root.dir = lang === 'ar' ? 'rtl' : 'ltr'
+        } catch (e) {
+          root.lang = 'ar'
+          root.dir = 'rtl'
         }
       })()
     </script>

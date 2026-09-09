@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import type { I18nValue } from './i18n/context'
 
 export type MemberImportRow = {
   row: number
@@ -8,35 +9,71 @@ export type MemberImportRow = {
   membership_id: string | null
 }
 
+/** Why a row could not be imported. Translated at render time. */
+export type SkipReason =
+  | { code: 'missingId' }
+  | { code: 'invalidId'; id: string }
+  | { code: 'noValues' }
+
+export type SkippedRow = { row: number; reason: SkipReason }
+
 export type ParsedMemberFile = {
   rows: MemberImportRow[]
-  /** Rows present in the file but unusable, with the reason why */
-  skipped: { row: number; reason: string }[]
+  skipped: SkippedRow[]
   headers: string[]
+}
+
+export type ParseErrorCode = 'noSheets' | 'noIdColumn' | 'noValueColumn'
+
+export class MemberFileError extends Error {
+  code: ParseErrorCode
+
+  constructor(code: ParseErrorCode) {
+    super(code)
+    this.name = 'MemberFileError'
+    this.code = code
+  }
 }
 
 export const IMPORT_ACCEPT = '.csv,.xlsx,.xls,.ods,.txt'
 
-const TEMPLATE_HEADERS = [
-  'Telegram user ID',
-  'Username',
-  'Custom name',
-  'Membership ID',
-] as const
-
 /**
- * Header aliases are matched loosely so admins can bring their own sheet.
- * Telegram-owned columns (display name) are deliberately absent: they are never imported.
+ * Header aliases are matched loosely so admins can bring their own sheet, in
+ * either language. Telegram-owned columns (display name) are deliberately
+ * absent: they are never imported.
  */
 const FIELD_ALIASES: Record<keyof Omit<MemberImportRow, 'row'>, string[]> = {
-  telegram_user_id: ['telegramuserid', 'telegramid', 'userid', 'tgid', 'id'],
-  username: ['username', 'telegramusername', 'handle', 'user'],
-  custom_name: ['customname', 'name', 'fullname', 'alias'],
-  membership_id: ['membershipid', 'membership', 'employeeid', 'memberid'],
+  telegram_user_id: [
+    'telegramuserid',
+    'telegramid',
+    'userid',
+    'tgid',
+    'id',
+    'معرفتيليجرام',
+    'معرفمستخدمتيليجرام',
+    'معرفالمستخدم',
+    'المعرف',
+  ],
+  username: ['username', 'telegramusername', 'handle', 'user', 'اسمالمستخدم', 'المعرفاللفظي'],
+  custom_name: ['customname', 'name', 'fullname', 'alias', 'الاسمالمخصص', 'الاسم', 'اسم'],
+  membership_id: [
+    'membershipid',
+    'membership',
+    'employeeid',
+    'memberid',
+    'رقمالعضوية',
+    'العضوية',
+    'رقمالعضو',
+  ],
 }
 
+const ARABIC_DIACRITICS = /[\u064B-\u0652\u0670]/g
+
 function normalizeHeader(header: string): string {
-  return header.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return header
+    .toLowerCase()
+    .replace(ARABIC_DIACRITICS, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
 }
 
 function buildHeaderMap(headers: string[]): Partial<Record<keyof MemberImportRow, string>> {
@@ -68,7 +105,7 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
   const workbook = XLSX.read(buffer, { type: 'array', raw: false })
   const sheetName = workbook.SheetNames[0]
   if (!sheetName) {
-    throw new Error('The file has no sheets.')
+    throw new MemberFileError('noSheets')
   }
 
   const sheet = workbook.Sheets[sheetName]
@@ -77,18 +114,14 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
   const headerMap = buildHeaderMap(headers)
 
   if (!headerMap.telegram_user_id && !headerMap.username) {
-    throw new Error(
-      'No "Telegram user ID" or "Username" column found. Download the example CSV for the expected columns.',
-    )
+    throw new MemberFileError('noIdColumn')
   }
   if (!headerMap.custom_name && !headerMap.membership_id) {
-    throw new Error(
-      'No "Custom name" or "Membership ID" column found. There would be nothing to import.',
-    )
+    throw new MemberFileError('noValueColumn')
   }
 
   const rows: MemberImportRow[] = []
-  const skipped: { row: number; reason: string }[] = []
+  const skipped: SkippedRow[] = []
 
   raw.forEach((entry, index) => {
     const rowNumber = index + 2
@@ -100,16 +133,16 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
     if (!telegramUserId && !username) {
       // Blank trailing rows are common in spreadsheets — ignore them silently
       if (customName || membershipId) {
-        skipped.push({ row: rowNumber, reason: 'Missing Telegram user ID and username' })
+        skipped.push({ row: rowNumber, reason: { code: 'missingId' } })
       }
       return
     }
     if (telegramUserId && !/^-?\d+$/.test(telegramUserId)) {
-      skipped.push({ row: rowNumber, reason: `Invalid Telegram user ID "${telegramUserId}"` })
+      skipped.push({ row: rowNumber, reason: { code: 'invalidId', id: telegramUserId } })
       return
     }
     if (!customName && !membershipId) {
-      skipped.push({ row: rowNumber, reason: 'No custom name or membership ID' })
+      skipped.push({ row: rowNumber, reason: { code: 'noValues' } })
       return
     }
 
@@ -125,30 +158,22 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
   return { rows, skipped, headers }
 }
 
-export function downloadMemberTemplate(): void {
-  const example = [
-    {
-      'Telegram user ID': '123456789',
-      Username: '@ahmad',
-      'Custom name': 'Ahmad Haddad',
-      'Membership ID': 'EMP-001',
-    },
-    {
-      'Telegram user ID': '987654321',
-      Username: '',
-      'Custom name': 'Lina Saleh',
-      'Membership ID': 'EMP-002',
-    },
-    {
-      'Telegram user ID': '',
-      Username: '@omar_k',
-      'Custom name': 'Omar Khalil',
-      'Membership ID': 'EMP-003',
-    },
+export function downloadMemberTemplate(t: I18nValue['t']): void {
+  const columns = [
+    t('sheet.telegramUserId'),
+    t('sheet.username'),
+    t('sheet.customName'),
+    t('sheet.membershipId'),
   ]
 
-  const worksheet = XLSX.utils.json_to_sheet(example, { header: [...TEMPLATE_HEADERS] })
+  const example = [
+    ['123456789', '@ahmad', 'Ahmad Haddad', 'EMP-001'],
+    ['987654321', '', 'Lina Saleh', 'EMP-002'],
+    ['', '@omar_k', 'Omar Khalil', 'EMP-003'],
+  ].map((values) => Object.fromEntries(columns.map((col, i) => [col, values[i]])))
+
+  const worksheet = XLSX.utils.json_to_sheet(example, { header: columns })
   const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Members')
+  XLSX.utils.book_append_sheet(workbook, worksheet, t('sheet.membersTab'))
   XLSX.writeFile(workbook, 'members-import-example.csv', { bookType: 'csv' })
 }
