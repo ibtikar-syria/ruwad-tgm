@@ -827,6 +827,39 @@ th {
   margin: 0;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 0.15rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid #243344;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tabs a {
+  padding: 0.6rem 0.9rem;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.settings-tabs a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-tabs a.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
 .settings-stack {
   display: grid;
   gap: 1rem;
@@ -1278,6 +1311,16 @@ button.danger {
 
   .field-search {
     max-width: none;
+  }
+
+  .settings-tabs {
+    margin: 0 -0.85rem 1rem;
+    padding: 0 0.85rem;
+  }
+
+  .settings-tabs a {
+    padding: 0.6rem 0.7rem;
+    font-size: 0.92rem;
   }
 
   .meta-grid {

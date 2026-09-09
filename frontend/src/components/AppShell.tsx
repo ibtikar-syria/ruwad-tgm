@@ -1,4 +1,4 @@
-import { Navigate, Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
@@ -31,12 +31,8 @@ export function RequireAuth() {
 
 export function AppShell() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [location.pathname])
+  const closeMenu = () => setMenuOpen(false)
 
   async function logout() {
     try {
@@ -61,9 +57,15 @@ export function AppShell() {
             <span className="nav-toggle-bars" aria-hidden="true" />
           </button>
           <nav className="topnav-links">
-            <NavLink to="/chats">Chats</NavLink>
-            <NavLink to="/analytics">Analytics</NavLink>
-            <NavLink to="/settings">Settings</NavLink>
+            <NavLink to="/chats" onClick={closeMenu}>
+              Chats
+            </NavLink>
+            <NavLink to="/analytics" onClick={closeMenu}>
+              Analytics
+            </NavLink>
+            <NavLink to="/settings" onClick={closeMenu}>
+              Settings
+            </NavLink>
             <button type="button" className="linkish topnav-logout" onClick={logout}>
               Log out
             </button>
