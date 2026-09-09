@@ -55,6 +55,13 @@ export type TelegramMessageEntity = {
 export type TelegramMessage = {
   message_id: number
   from?: TelegramUser
+  /**
+   * Present when the message was sent on behalf of a chat — the group itself for
+   * anonymous admins, or a linked channel for auto-forwards into a discussion group.
+   */
+  sender_chat?: TelegramChat
+  /** Custom title of an anonymous group administrator, when shown as a signature */
+  author_signature?: string
   chat: TelegramChat
   date: number
   text?: string

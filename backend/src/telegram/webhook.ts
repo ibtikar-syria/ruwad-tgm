@@ -17,6 +17,12 @@ import type { CloudflareBindings } from '../types'
 import { deleteMessage, sendMessage, sendPoll } from './api'
 import { isPollViaBotEnabled } from '../db/settings'
 import { extractHashtags } from './hashtags'
+import {
+  anonymousActorAsUser,
+  anonymousAdminAsUser,
+  isAnonymousAdminActor,
+  isAnonymousAdminMessage,
+} from './anonymousAdmin'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
 import { isPollCommand, parsePollCommand } from './pollCommand'
 import { extractTopicTitle } from './topicTitle'
@@ -138,6 +144,17 @@ function senderLabel(user?: TelegramUser): string {
   return name || String(user.id)
 }
 
+/** Real users plus anonymous admins (who arrive as a fake bot `from` + `sender_chat`). */
+function trackableSender(message: TelegramMessage): TelegramUser | null {
+  if (isAnonymousAdminMessage(message)) {
+    return anonymousAdminAsUser(message)
+  }
+  if (message.from && !message.from.is_bot) {
+    return message.from
+  }
+  return null
+}
+
 /** Remove a group message (and its poll rows) from our DB — e.g. after deleting it in Telegram. */
 async function removeStoredGroupMessage(
   env: CloudflareBindings,
@@ -187,7 +204,8 @@ async function reclaimUserPollAsBotPoll(
   message: TelegramMessage,
 ): Promise<'reclaimed' | 'failed_keep' | 'skipped'> {
   if (!message.poll || !env.TELEGRAM_BOT_TOKEN) return 'skipped'
-  if (!message.from || message.from.is_bot) return 'skipped'
+  const sender = trackableSender(message)
+  if (!sender) return 'skipped'
   if (!(await isPollViaBotEnabled(env))) return 'skipped'
 
   const poll = message.poll
@@ -254,7 +272,7 @@ async function reclaimUserPollAsBotPoll(
     console.error('Failed to repost poll via bot', sent.description)
     await sendMessage(env.TELEGRAM_BOT_TOKEN, {
       chat_id: message.chat.id,
-      text: `Deleted the poll from ${senderLabel(message.from)} but failed to repost it: ${sent.description ?? 'unknown error'}`,
+      text: `Deleted the poll from ${senderLabel(sender)} but failed to repost it: ${sent.description ?? 'unknown error'}`,
       ...(typeof message.message_thread_id === 'number'
         ? { message_thread_id: message.message_thread_id }
         : {}),
@@ -270,7 +288,7 @@ async function reclaimUserPollAsBotPoll(
 
   const note = await sendMessage(env.TELEGRAM_BOT_TOKEN, {
     chat_id: message.chat.id,
-    text: `Poll from ${senderLabel(message.from)} was reposted by the bot so votes can be tracked.`,
+    text: `Poll from ${senderLabel(sender)} was reposted by the bot so votes can be tracked.`,
     ...(typeof message.message_thread_id === 'number'
       ? { message_thread_id: message.message_thread_id }
       : {}),
@@ -294,10 +312,11 @@ async function storeGroupMessage(
 ): Promise<void> {
   const chat = message.chat
   const chatId = String(chat.id)
-  const fromId = message.from ? String(message.from.id) : '0'
+  const sender = trackableSender(message)
+  const fromId = sender ? String(sender.id) : message.from ? String(message.from.id) : '0'
 
-  if (message.from && !message.from.is_bot) {
-    await upsertMember(env.MAIN_DB, message.from)
+  if (sender) {
+    await upsertMember(env.MAIN_DB, sender)
     await upsertGroupMember(env.MAIN_DB, chatId, fromId)
   }
 
@@ -351,8 +370,7 @@ async function storeGroupMessage(
     !opts.skipStats &&
     !existing &&
     !isServiceTopicEvent &&
-    message.from &&
-    !message.from.is_bot
+    sender
   ) {
     await incrementStats(env.MAIN_DB, chatId, fromId, {
       messages: 1,
@@ -369,9 +387,9 @@ async function handleMessage(
 ): Promise<void> {
   const chat = message.chat
   const chatId = String(chat.id)
+  const sender = trackableSender(message)
   const shouldReplyInfo = countStats && isInfoCommand(message.text)
-  const shouldCreatePoll =
-    countStats && message.from && !message.from.is_bot && isPollCommand(message.text)
+  const shouldCreatePoll = countStats && Boolean(sender) && isPollCommand(message.text)
 
   if (chat.type === 'private') {
     if (!message.from) return
@@ -407,14 +425,12 @@ async function handleMessage(
 
   // Always store polls (including ones sent by this bot) so votes can be linked
   if (message.poll) {
-    if (countStats && message.from && !message.from.is_bot) {
+    if (countStats && sender) {
       const reclaim = await reclaimUserPollAsBotPoll(env, message)
       if (reclaim === 'reclaimed') {
         // Original deleted; bot poll arrives as a separate update
-        if (message.from) {
-          await upsertMember(env.MAIN_DB, message.from)
-          await upsertGroupMember(env.MAIN_DB, chatId, String(message.from.id))
-        }
+        await upsertMember(env.MAIN_DB, sender)
+        await upsertGroupMember(env.MAIN_DB, chatId, String(sender.id))
         return
       }
       // failed_keep or skipped → store the user poll as usual
@@ -423,10 +439,8 @@ async function handleMessage(
     return
   }
 
-  if (!message.from) return
-
-  // Service / other bot messages without polls: ignore content storage
-  if (message.from.is_bot) return
+  // No trackable human/anonymous sender — ignore other bots and empty-from service noise
+  if (!sender) return
 
   if (shouldCreatePoll) {
     await storeGroupMessage(env, message, { countStats })
@@ -493,11 +507,17 @@ async function handleReaction(
   const chat = reaction.chat
   if (!isGroupChat(chat.type)) return
 
-  const user = reaction.user
-  if (!user || user.is_bot) return
+  let actor: TelegramUser | null = null
+  if (reaction.user && !reaction.user.is_bot) {
+    actor = reaction.user
+  } else if (isAnonymousAdminActor(chat, reaction.actor_chat) && reaction.actor_chat) {
+    // Anonymous admins react as the group itself — no real user id is provided
+    actor = anonymousActorAsUser(reaction.actor_chat)
+  }
+  if (!actor) return
 
   await upsertGroup(env.MAIN_DB, chat, true)
-  const member = await upsertMember(env.MAIN_DB, user)
+  const member = await upsertMember(env.MAIN_DB, actor)
   const chatId = String(chat.id)
   await upsertGroupMember(env.MAIN_DB, chatId, member.telegram_user_id)
 

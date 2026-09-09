@@ -1,4 +1,5 @@
 import type { TelegramMessage } from './types'
+import { isAnonymousAdminMessage } from './anonymousAdmin'
 
 function escapeHtml(value: string): string {
   return value
@@ -28,7 +29,17 @@ export function formatInfoMessageHtml(message: TelegramMessage): string {
       `TopicID: <code>${escapeHtml(String(message.message_thread_id))}</code>`,
     )
   }
-  if (sender) {
+  if (isAnonymousAdminMessage(message)) {
+    lines.push('Sender: Anonymous Admin (Remain anonymous)')
+    if (message.author_signature) {
+      lines.push(`Signature: ${escapeHtml(message.author_signature)}`)
+    }
+    if (message.sender_chat) {
+      lines.push(
+        `SenderChatID: <code>${escapeHtml(String(message.sender_chat.id))}</code>`,
+      )
+    }
+  } else if (sender) {
     lines.push(`SenderID: <code>${escapeHtml(String(sender.id))}</code>`)
     lines.push(
       `SenderUsername: <code>${escapeHtml(sender.username ?? 'N/A')}</code>`,
