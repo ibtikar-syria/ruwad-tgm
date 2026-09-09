@@ -177,8 +177,16 @@ export function ChatsPage() {
       : selected.title || selected.chat_id
     : 'Select a chat'
 
+  // On mobile, show only the message pane once a concrete chat/topic is open
+  const chatOpenOnMobile =
+    Boolean(selectedChatId) && (!selectedIsForum || Boolean(selectedThreadId))
+
+  function backToChatList() {
+    setSelection(null, null)
+  }
+
   return (
-    <div className="groups-layout">
+    <div className={`groups-layout${chatOpenOnMobile ? ' chat-open' : ''}`}>
       <aside className="group-list">
         <div className="pane-header">Chats</div>
         {loadingChats && <p className="muted pad">Loading…</p>}
@@ -259,7 +267,17 @@ export function ChatsPage() {
 
       <section className="chat-pane">
         <div className="pane-header chat-header">
-          <span className="chat-header-title">{headerTitle}</span>
+          <div className="chat-header-leading">
+            <button
+              type="button"
+              className="chat-back-btn"
+              onClick={backToChatList}
+              aria-label="Back to chats"
+            >
+              ←
+            </button>
+            <span className="chat-header-title">{headerTitle}</span>
+          </div>
           {selectedChatId && (!selectedIsForum || selectedThreadId) && (
             <button
               type="button"

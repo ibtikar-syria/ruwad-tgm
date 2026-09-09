@@ -356,7 +356,7 @@ export function SettingsPage() {
             </label>
 
             <div className="table-wrap members-table">
-              <table>
+              <table className="data-table">
                 <thead>
                   <tr>
                     <th>Member</th>
@@ -380,14 +380,16 @@ export function SettingsPage() {
                       (drafts[m.telegram_user_id] ?? '') !== (m.membership_id ?? '')
                     return (
                       <tr key={m.telegram_user_id} className={dirty ? 'row-dirty' : undefined}>
-                        <td>
+                        <td data-label="Member">
                           <div className="cell-stack">
                             <strong>{m.display_name || m.telegram_user_id}</strong>
                             {m.username && <span className="muted">@{m.username}</span>}
                           </div>
                         </td>
-                        <td className="mono">{m.telegram_user_id}</td>
-                        <td>
+                        <td data-label="Telegram ID" className="mono">
+                          {m.telegram_user_id}
+                        </td>
+                        <td data-label="Membership ID">
                           <input
                             value={drafts[m.telegram_user_id] ?? ''}
                             onChange={(e) =>
@@ -399,7 +401,7 @@ export function SettingsPage() {
                             placeholder="e.g. EMP-001"
                           />
                         </td>
-                        <td className="actions-cell">
+                        <td className="actions-cell" data-label="Actions">
                           <button
                             type="button"
                             className={dirty ? undefined : 'secondary'}

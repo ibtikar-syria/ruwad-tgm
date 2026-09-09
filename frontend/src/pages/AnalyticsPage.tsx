@@ -109,7 +109,7 @@ export function AnalyticsPage() {
 
       {!loading && (
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Member</th>
@@ -122,23 +122,25 @@ export function AnalyticsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={5} className="muted empty-cell">
                     No member activity yet.
                   </td>
                 </tr>
               )}
               {rows.map((r) => (
                 <tr key={r.telegram_user_id}>
-                  <td>
+                  <td data-label="Member">
                     <div className="cell-stack">
                       <strong>{r.display_name || r.telegram_user_id}</strong>
                       {r.username && <span className="muted">@{r.username}</span>}
                     </div>
                   </td>
-                  <td>{r.membership_id || <span className="muted">unassigned</span>}</td>
-                  <td>{r.messages_count}</td>
-                  <td>{r.replies_count}</td>
-                  <td>{r.reactions_count}</td>
+                  <td data-label="Membership ID">
+                    {r.membership_id || <span className="muted">unassigned</span>}
+                  </td>
+                  <td data-label="Messages">{r.messages_count}</td>
+                  <td data-label="Replies">{r.replies_count}</td>
+                  <td data-label="Reactions">{r.reactions_count}</td>
                 </tr>
               ))}
             </tbody>

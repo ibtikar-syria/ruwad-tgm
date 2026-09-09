@@ -1,4 +1,4 @@
-import { Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
@@ -31,6 +31,12 @@ export function RequireAuth() {
 
 export function AppShell() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
 
   async function logout() {
     try {
@@ -41,17 +47,28 @@ export function AppShell() {
   }
 
   return (
-    <div className="shell">
+    <div className={`shell${menuOpen ? ' nav-open' : ''}`}>
       <header className="topnav">
-        <div className="brand">Group Manager</div>
-        <nav>
-          <NavLink to="/chats">Chats</NavLink>
-          <NavLink to="/analytics">Analytics</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
-        </nav>
-        <button type="button" className="linkish" onClick={logout}>
-          Log out
-        </button>
+        <div className="topnav-bar">
+          <div className="brand">Group Manager</div>
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span className="nav-toggle-bars" aria-hidden="true" />
+          </button>
+          <nav className="topnav-links">
+            <NavLink to="/chats">Chats</NavLink>
+            <NavLink to="/analytics">Analytics</NavLink>
+            <NavLink to="/settings">Settings</NavLink>
+            <button type="button" className="linkish topnav-logout" onClick={logout}>
+              Log out
+            </button>
+          </nav>
+        </div>
       </header>
       <main className="shell-main">
         <Outlet />
