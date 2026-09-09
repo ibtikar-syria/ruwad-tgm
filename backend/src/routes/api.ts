@@ -642,10 +642,15 @@ type MemberImportRow = {
   username?: string | null
   custom_name?: string | null
   membership_id?: string | null
-  display_name?: string | null
 }
 
 const MEMBER_IMPORT_LIMIT = 5000
+
+/**
+ * Bulk import writes only custom_name and membership_id. telegram_user_id and
+ * username are owned by Telegram and are used for matching only — a username in
+ * the sheet can be stale, so a Telegram user ID always wins when both are given.
+ */
 
 apiRoutes.post('/members/import', async (c) => {
   let body: { rows?: MemberImportRow[] }
@@ -694,8 +699,8 @@ apiRoutes.post('/members/import', async (c) => {
     const username = clean(raw.username)?.replace(/^@/, '') ?? null
     const customName = clean(raw.custom_name)
     const membershipId = clean(raw.membership_id)
-    const displayName = clean(raw.display_name)
 
+    // Telegram user ID takes priority; username is only a fallback lookup
     let targetId = telegramUserId
     if (!targetId && username) {
       targetId = idByUsername.get(username.toLowerCase()) ?? null
@@ -735,22 +740,14 @@ apiRoutes.post('/members/import', async (c) => {
         ).bind(membershipId, customName, now, targetId),
       )
     } else {
+      // display_name and username stay NULL until Telegram supplies them on first message
       created += 1
       statements.push(
         c.env.MAIN_DB.prepare(
           `INSERT INTO members
-             (id, telegram_user_id, membership_id, custom_name, display_name, username, first_seen_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).bind(
-          crypto.randomUUID(),
-          targetId,
-          membershipId,
-          customName,
-          displayName ?? customName,
-          username,
-          now,
-          now,
-        ),
+             (id, telegram_user_id, membership_id, custom_name, first_seen_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(crypto.randomUUID(), targetId, membershipId, customName, now, now),
       )
     }
   })

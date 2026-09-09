@@ -6,7 +6,6 @@ export type MemberImportRow = {
   username: string | null
   custom_name: string | null
   membership_id: string | null
-  display_name: string | null
 }
 
 export type ParsedMemberFile = {
@@ -25,13 +24,15 @@ const TEMPLATE_HEADERS = [
   'Membership ID',
 ] as const
 
-/** Header aliases are matched loosely so admins can bring their own sheet. */
+/**
+ * Header aliases are matched loosely so admins can bring their own sheet.
+ * Telegram-owned columns (display name) are deliberately absent: they are never imported.
+ */
 const FIELD_ALIASES: Record<keyof Omit<MemberImportRow, 'row'>, string[]> = {
   telegram_user_id: ['telegramuserid', 'telegramid', 'userid', 'tgid', 'id'],
   username: ['username', 'telegramusername', 'handle', 'user'],
   custom_name: ['customname', 'name', 'fullname', 'alias'],
   membership_id: ['membershipid', 'membership', 'employeeid', 'memberid'],
-  display_name: ['displayname', 'telegramname'],
 }
 
 function normalizeHeader(header: string): string {
@@ -95,7 +96,6 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
     const username = cell(entry, headerMap.username)?.replace(/^@/, '') ?? null
     const customName = cell(entry, headerMap.custom_name)
     const membershipId = cell(entry, headerMap.membership_id)
-    const displayName = cell(entry, headerMap.display_name)
 
     if (!telegramUserId && !username) {
       // Blank trailing rows are common in spreadsheets — ignore them silently
@@ -119,7 +119,6 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
       username,
       custom_name: customName,
       membership_id: membershipId,
-      display_name: displayName,
     })
   })
 

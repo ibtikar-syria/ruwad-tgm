@@ -169,7 +169,6 @@ export function SettingsPage() {
           username: r.username,
           custom_name: r.custom_name,
           membership_id: r.membership_id,
-          display_name: r.display_name,
         })),
       )
       const parts = [`${res.updated} updated`, `${res.created} created`]
@@ -440,8 +439,10 @@ export function SettingsPage() {
               <h2>Import data</h2>
               <p className="muted">
                 Bulk-assign custom names and membership IDs from a spreadsheet. Supports CSV, XLSX,
-                XLS, and ODS. Rows are matched on Telegram user ID, or on username when the ID is
-                blank. Empty cells leave the existing value untouched.
+                XLS, and ODS. Only the custom name and membership ID are written — the Telegram ID
+                and username are never modified, and empty cells leave the existing value untouched.
+                Rows are matched on Telegram user ID; a username is only used to look up the ID when
+                that cell is blank, since usernames can change.
               </p>
             </div>
 

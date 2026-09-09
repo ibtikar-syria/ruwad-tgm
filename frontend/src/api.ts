@@ -148,7 +148,6 @@ export const api = {
       username: string | null
       custom_name: string | null
       membership_id: string | null
-      display_name: string | null
     }[],
   ) =>
     request<{
