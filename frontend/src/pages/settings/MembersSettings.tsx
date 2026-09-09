@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, type Member } from '../../api'
 import { StatusBanner } from '../../components/StatusBanner'
 import { useI18n, useTranslateRef } from '../../i18n/context'
+import { exportMembersSheet } from '../../importMembers'
 
 type MemberDraft = {
   membership_id: string
@@ -130,6 +131,28 @@ export function MembersSettings() {
             {t('members.descLead')} {t('members.descBulk')}{' '}
             <Link to="../import">{t('settings.tabImport')}</Link>.
           </p>
+        </div>
+
+        <div className="settings-panel-actions button-row">
+          <button
+            type="button"
+            className="secondary"
+            disabled={members.length === 0}
+            title={t('members.exportHint')}
+            onClick={() =>
+              exportMembersSheet(
+                members.map((m) => ({
+                  telegram_user_id: m.telegram_user_id,
+                  username: m.username,
+                  custom_name: m.custom_name,
+                  membership_id: m.membership_id,
+                })),
+                t,
+              )
+            }
+          >
+            {t('members.export')}
+          </button>
         </div>
 
         <label className="field field-search">

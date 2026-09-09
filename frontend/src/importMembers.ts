@@ -159,12 +159,7 @@ export async function parseMemberFile(file: File): Promise<ParsedMemberFile> {
 }
 
 export function downloadMemberTemplate(t: I18nValue['t']): void {
-  const columns = [
-    t('sheet.telegramUserId'),
-    t('sheet.username'),
-    t('sheet.customName'),
-    t('sheet.membershipId'),
-  ]
+  const columns = memberSheetColumns(t)
 
   const example = [
     ['123456789', '@ahmad', 'Ahmad Haddad', 'EMP-001'],
@@ -176,4 +171,41 @@ export function downloadMemberTemplate(t: I18nValue['t']): void {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, t('sheet.membersTab'))
   XLSX.writeFile(workbook, 'members-import-example.csv', { bookType: 'csv' })
+}
+
+/** Same columns as the import template / example CSV — safe to edit and re-import. */
+function memberSheetColumns(t: I18nValue['t']): string[] {
+  return [
+    t('sheet.telegramUserId'),
+    t('sheet.username'),
+    t('sheet.customName'),
+    t('sheet.membershipId'),
+  ]
+}
+
+export type MemberExportRow = {
+  telegram_user_id: string
+  username: string | null
+  custom_name: string | null
+  membership_id: string | null
+}
+
+export function exportMembersSheet(members: MemberExportRow[], t: I18nValue['t']): void {
+  const columns = memberSheetColumns(t)
+  const rows = members.map((m) => ({
+    [columns[0]]: m.telegram_user_id,
+    [columns[1]]: m.username ? `@${m.username.replace(/^@/, '')}` : '',
+    [columns[2]]: m.custom_name ?? '',
+    [columns[3]]: m.membership_id ?? '',
+  }))
+
+  const worksheet =
+    rows.length > 0
+      ? XLSX.utils.json_to_sheet(rows, { header: columns })
+      : XLSX.utils.aoa_to_sheet([columns])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, t('sheet.membersTab'))
+
+  const stamp = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(workbook, `members-export-${stamp}.csv`, { bookType: 'csv' })
 }

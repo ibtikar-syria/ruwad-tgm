@@ -178,6 +178,8 @@ export const en = {
   'members.saveFailed': 'Save failed',
   'members.loadFailed': 'Failed to load members',
   'members.loading': 'Loading members…',
+  'members.export': 'Export members',
+  'members.exportHint': 'Downloads a CSV with the same columns as Import data, ready to edit and re-import.',
 
   'import.heading': 'Import data',
   'import.desc':

@@ -179,6 +179,8 @@ export const ar: Record<keyof typeof en, string> = {
   'members.saveFailed': 'فشل الحفظ',
   'members.loadFailed': 'تعذّر تحميل الأعضاء',
   'members.loading': 'جارٍ تحميل الأعضاء…',
+  'members.export': 'تصدير الأعضاء',
+  'members.exportHint': 'ينزّل ملف CSV بنفس أعمدة تبويب استيراد البيانات، جاهز للتعديل ثم إعادة الاستيراد.',
 
   'import.heading': 'استيراد البيانات',
   'import.desc':
