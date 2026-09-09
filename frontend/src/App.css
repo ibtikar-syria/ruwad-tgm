@@ -298,11 +298,18 @@ button:focus-visible {
 }
 
 .brand {
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
   min-width: 0;
-  white-space: nowrap;
+}
+
+.brand-logo {
+  display: block;
+  height: 2rem;
+  width: auto;
+  max-width: 10rem;
+  object-fit: contain;
 }
 
 .nav-toggle {
@@ -1559,12 +1566,13 @@ button.danger {
     gap: 0.5rem;
   }
 
-  /* Four controls plus the brand is tight at phone widths, so the brand
-     truncates rather than colliding with the toggles */
   .brand {
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  .brand-logo {
+    height: 1.75rem;
+    max-width: 7.5rem;
   }
 
   .topnav-actions {

@@ -25,6 +25,7 @@ import {
 } from './anonymousAdmin'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
 import { isPollCommand, parsePollCommand } from './pollCommand'
+import { handlePrivateRegistration } from './register'
 import { extractTopicTitle } from './topicTitle'
 import type {
   TelegramMessage,
@@ -72,9 +73,20 @@ async function syncTopicFromMessage(
 
 async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN) return
+
+  let savedName: string | null = null
+  if (message.from && !message.from.is_bot) {
+    const row = await env.MAIN_DB.prepare(
+      `SELECT custom_name FROM members WHERE telegram_user_id = ?`,
+    )
+      .bind(String(message.from.id))
+      .first<{ custom_name: string | null }>()
+    savedName = row?.custom_name ?? null
+  }
+
   const result = await sendMessage(env.TELEGRAM_BOT_TOKEN, {
     chat_id: message.chat.id,
-    text: formatInfoMessageHtml(message),
+    text: formatInfoMessageHtml(message, { savedName }),
     parse_mode: 'HTML',
     reply_to_message_id: message.message_id,
     ...(typeof message.message_thread_id === 'number'
@@ -408,6 +420,11 @@ async function handleMessage(
         chatId,
       )
       .run()
+
+    // Registration owns /start, /name, and name replies — skip other DM commands then
+    if (countStats && (await handlePrivateRegistration(env, message))) {
+      return
+    }
 
     if (shouldReplyInfo) {
       await replyWithInfo(env, message)

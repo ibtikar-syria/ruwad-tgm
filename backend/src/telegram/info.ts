@@ -15,7 +15,10 @@ export function isInfoCommand(text: string | undefined): boolean {
   return /^\/info(?:@[A-Za-z0-9_]+)?$/i.test(command)
 }
 
-export function formatInfoMessageHtml(message: TelegramMessage): string {
+export function formatInfoMessageHtml(
+  message: TelegramMessage,
+  opts?: { savedName?: string | null },
+): string {
   const chat = message.chat
   const sender = message.from
   const lines = [
@@ -50,5 +53,12 @@ export function formatInfoMessageHtml(message: TelegramMessage): string {
       )}`,
     )
   }
+
+  const savedName = opts?.savedName?.trim()
+  if (savedName) {
+    lines.push('')
+    lines.push(`SavedName: ${escapeHtml(savedName)}`)
+  }
+
   return lines.join('\n')
 }

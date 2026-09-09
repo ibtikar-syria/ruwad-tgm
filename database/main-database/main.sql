@@ -68,3 +68,10 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Private-chat conversation state with the bot (registration, rename, …)
+CREATE TABLE IF NOT EXISTS bot_dm_state (
+    telegram_user_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

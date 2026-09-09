@@ -60,7 +60,9 @@ export function AppShell() {
     <div className={`shell${menuOpen ? ' nav-open' : ''}`}>
       <header className="topnav">
         <div className="topnav-bar">
-          <div className="brand">{t('app.brand')}</div>
+          <div className="brand" title={t('app.brand')}>
+            <img src="/logo.svg" alt={t('app.brand')} className="brand-logo" />
+          </div>
           <nav className="topnav-links">
             <NavLink to="/chats" onClick={closeMenu}>
               {t('nav.chats')}
