@@ -31,11 +31,13 @@ apiRoutes.get('/groups', async (c) => {
      WHERE message_thread_id IS NOT NULL AND message_thread_id != ''`,
   ).all<{ chat_id: string; message_thread_id: string }>()
 
+  // Oldest first so a later forum_topic_edited overwrites the creation name
   const titleRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
     `SELECT chat_id, message_thread_id, message_json
      FROM all_messages_groups
      WHERE message_json LIKE '%forum_topic_created%'
-        OR message_json LIKE '%forum_topic_edited%'`,
+        OR message_json LIKE '%forum_topic_edited%'
+     ORDER BY created_at ASC`,
   ).all<{ chat_id: string; message_thread_id: string; message_json: string }>()
 
   const titleByKey = new Map<string, string>()
@@ -78,10 +80,12 @@ apiRoutes.get('/groups', async (c) => {
   ).all<GroupRow>()
 
   const topicRows = await c.env.MAIN_DB.prepare(
-    `SELECT chat_id, message_thread_id, title, is_general, is_active, first_seen_at, updated_at
+    `SELECT chat_id, message_thread_id, title, custom_title, is_general, is_active,
+            first_seen_at, updated_at
      FROM topics
      WHERE is_active = 1
-     ORDER BY is_general DESC, title COLLATE NOCASE ASC, message_thread_id ASC`,
+     ORDER BY is_general DESC, COALESCE(custom_title, title) COLLATE NOCASE ASC,
+              message_thread_id ASC`,
   ).all<TopicRow>()
 
   const topicsByChat = new Map<string, TopicRow[]>()
@@ -635,6 +639,56 @@ apiRoutes.patch('/members/:telegramUserId', async (c) => {
     .first<MemberRow>()
 
   return c.json({ member })
+})
+
+/**
+ * Renames a forum topic for display only. Telegram owns `title` and keeps
+ * overwriting it during the backfill in GET /groups, so the admin's name lives
+ * in `custom_title`. Sending null or an empty string reverts to Telegram's name.
+ */
+apiRoutes.patch('/groups/:chatId/topics/:threadId', async (c) => {
+  const chatId = c.req.param('chatId')
+  const threadId = c.req.param('threadId')
+
+  let body: { custom_title?: string | null }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
+
+  if (!('custom_title' in body)) {
+    return c.json({ error: 'custom_title is required' }, 400)
+  }
+
+  const raw = body.custom_title == null ? '' : String(body.custom_title).trim()
+  if (raw.length > 128) {
+    return c.json({ error: 'custom_title must be 128 characters or fewer' }, 400)
+  }
+  const customTitle = raw === '' ? null : raw
+
+  const now = new Date().toISOString()
+  const result = await c.env.MAIN_DB.prepare(
+    `UPDATE topics SET custom_title = ?, updated_at = ?
+     WHERE chat_id = ? AND message_thread_id = ?`,
+  )
+    .bind(customTitle, now, chatId, threadId)
+    .run()
+
+  if (!result.meta.changes) {
+    return c.json({ error: 'Topic not found' }, 404)
+  }
+
+  const topic = await c.env.MAIN_DB.prepare(
+    `SELECT chat_id, message_thread_id, title, custom_title, is_general, is_active,
+            first_seen_at, updated_at
+     FROM topics
+     WHERE chat_id = ? AND message_thread_id = ?`,
+  )
+    .bind(chatId, threadId)
+    .first<TopicRow>()
+
+  return c.json({ topic })
 })
 
 type MemberImportRow = {

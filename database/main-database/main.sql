@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS topics (
     chat_id TEXT NOT NULL,
     message_thread_id TEXT NOT NULL,
     title TEXT,
+    custom_title TEXT,
     is_general INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),

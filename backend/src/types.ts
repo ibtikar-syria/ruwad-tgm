@@ -24,6 +24,7 @@ export type TopicRow = {
   chat_id: string
   message_thread_id: string
   title: string | null
+  custom_title: string | null
   is_general: number
   is_active: number
   first_seen_at: string

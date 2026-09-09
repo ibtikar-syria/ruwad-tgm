@@ -2,6 +2,7 @@ export type Topic = {
   chat_id: string
   message_thread_id: string
   title: string | null
+  custom_title: string | null
   is_general: number
   is_active: number
   first_seen_at: string
@@ -134,6 +135,11 @@ export const api = {
         )
       : request<{ analytics: AnalyticsRow[] }>('/api/analytics'),
   members: () => request<{ members: Member[] }>('/api/members'),
+  updateTopic: (chatId: string, threadId: string, customTitle: string | null) =>
+    request<{ topic: Topic }>(
+      `/api/groups/${encodeURIComponent(chatId)}/topics/${encodeURIComponent(threadId)}`,
+      { method: 'PATCH', body: JSON.stringify({ custom_title: customTitle }) },
+    ),
   updateMember: (
     telegramUserId: string,
     patch: { membership_id?: string | null; custom_name?: string | null },

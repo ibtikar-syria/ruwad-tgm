@@ -609,6 +609,85 @@ button:focus-visible {
   background: var(--topic-list-bg);
 }
 
+.topic-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.topic-row .topic-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.topic-rename {
+  width: 2rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.topic-rename svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.topic-row:hover .topic-rename,
+.topic-rename:focus-visible {
+  opacity: 1;
+}
+
+.topic-rename:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.topic-edit {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  padding-inline-start: 3.4rem;
+  background: var(--surface-hover);
+}
+
+.topic-edit input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.topic-edit button {
+  width: 1.85rem;
+  height: 1.85rem;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.topic-edit-save {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.topic-edit-cancel {
+  background: transparent;
+  color: var(--muted);
+}
+
+.topic-edit-cancel:hover {
+  color: var(--text);
+  background: var(--hover-soft);
+}
+
 .topic-item {
   width: 100%;
   display: flex;

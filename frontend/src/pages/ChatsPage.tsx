@@ -15,6 +15,15 @@ function formatTime(iso: string, locale: string): string {
   })
 }
 
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z" strokeLinejoin="round" />
+      <path d="M14.5 5.5l4 4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2)
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
@@ -28,10 +37,16 @@ function formatMessageJson(raw: string): string {
   }
 }
 
+/** An admin rename wins over the name Telegram last reported. */
 function topicLabel(topic: Topic, t: I18nValue['t']): string {
+  if (topic.custom_title?.trim()) return topic.custom_title
   if (topic.title?.trim()) return topic.title
   if (topic.is_general || topic.message_thread_id === '1') return t('chats.general')
   return t('chats.topicNumber', { id: topic.message_thread_id })
+}
+
+function topicKey(chatId: string, threadId: string): string {
+  return `${chatId}:${threadId}`
 }
 
 function isForumChat(chat: Group): boolean {
@@ -52,6 +67,9 @@ export function ChatsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [jsonMessage, setJsonMessage] = useState<ChatMessage | null>(null)
+  const [editingTopic, setEditingTopic] = useState<string | null>(null)
+  const [topicDraft, setTopicDraft] = useState('')
+  const [savingTopic, setSavingTopic] = useState(false)
 
   async function loadChats() {
     setLoadingChats(true)
@@ -187,6 +205,45 @@ export function ChatsPage() {
     setSelection(null, null)
   }
 
+  function startTopicEdit(topic: Topic) {
+    setEditingTopic(topicKey(topic.chat_id, topic.message_thread_id))
+    setTopicDraft(topic.custom_title ?? topic.title ?? '')
+    setError(null)
+  }
+
+  function cancelTopicEdit() {
+    setEditingTopic(null)
+    setTopicDraft('')
+  }
+
+  async function saveTopicTitle(topic: Topic) {
+    const next = topicDraft.trim()
+    // Clearing the field hands the name back to Telegram
+    const customTitle = next === '' || next === topic.title?.trim() ? null : next
+    setSavingTopic(true)
+    setError(null)
+    try {
+      const res = await api.updateTopic(topic.chat_id, topic.message_thread_id, customTitle)
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.chat_id === topic.chat_id
+            ? {
+                ...chat,
+                topics: chat.topics.map((existing) =>
+                  existing.message_thread_id === topic.message_thread_id ? res.topic : existing,
+                ),
+              }
+            : chat,
+        ),
+      )
+      cancelTopicEdit()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('chats.topicSaveFailed'))
+    } finally {
+      setSavingTopic(false)
+    }
+  }
+
   return (
     <div className={`groups-layout${chatOpenOnMobile ? ' chat-open' : ''}`}>
       <aside className="group-list">
@@ -248,16 +305,70 @@ export function ChatsPage() {
                       const active =
                         g.chat_id === selectedChatId &&
                         topic.message_thread_id === selectedThreadId
+                      const editing =
+                        editingTopic === topicKey(topic.chat_id, topic.message_thread_id)
                       return (
                         <li key={topic.message_thread_id}>
-                          <button
-                            type="button"
-                            className={active ? 'topic-item active' : 'topic-item'}
-                            onClick={() => selectTopic(g, topic)}
-                          >
-                            <span className="topic-hash">#</span>
-                            <span className="topic-title">{topicLabel(topic, t)}</span>
-                          </button>
+                          {editing ? (
+                            <form
+                              className="topic-edit"
+                              onSubmit={(e) => {
+                                e.preventDefault()
+                                void saveTopicTitle(topic)
+                              }}
+                            >
+                              <input
+                                value={topicDraft}
+                                onChange={(e) => setTopicDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') cancelTopicEdit()
+                                }}
+                                placeholder={topic.title ?? t('chats.topicNamePlaceholder')}
+                                aria-label={t('chats.topicName')}
+                                maxLength={128}
+                                autoFocus
+                              />
+                              <button
+                                type="submit"
+                                className="topic-edit-save"
+                                disabled={savingTopic}
+                                aria-label={t('common.save')}
+                                title={t('common.save')}
+                              >
+                                ✓
+                              </button>
+                              <button
+                                type="button"
+                                className="topic-edit-cancel"
+                                disabled={savingTopic}
+                                onClick={cancelTopicEdit}
+                                aria-label={t('chats.cancelRename')}
+                                title={t('chats.cancelRename')}
+                              >
+                                ✕
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="topic-row">
+                              <button
+                                type="button"
+                                className={active ? 'topic-item active' : 'topic-item'}
+                                onClick={() => selectTopic(g, topic)}
+                              >
+                                <span className="topic-hash">#</span>
+                                <span className="topic-title">{topicLabel(topic, t)}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="topic-rename"
+                                onClick={() => startTopicEdit(topic)}
+                                aria-label={t('chats.renameTopic')}
+                                title={t('chats.renameTopic')}
+                              >
+                                <PencilIcon />
+                              </button>
+                            </div>
+                          )}
                         </li>
                       )
                     })}
