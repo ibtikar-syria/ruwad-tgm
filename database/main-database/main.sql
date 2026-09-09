@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS member_stats (
     messages_count INTEGER NOT NULL DEFAULT 0,
     replies_count INTEGER NOT NULL DEFAULT 0,
     reactions_count INTEGER NOT NULL DEFAULT 0,
+    -- JSON object of hashtag -> number of messages containing it
+    hashtag_count TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (chat_id, telegram_user_id)
 );

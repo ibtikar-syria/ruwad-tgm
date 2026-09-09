@@ -85,6 +85,7 @@ export const ar: Record<keyof typeof en, string> = {
   'analytics.loadFailed': 'تعذّر تحميل الإحصائيات',
   'analytics.empty': 'لا يوجد نشاط للأعضاء بعد.',
   'analytics.unassigned': 'غير مُعيَّن',
+  'analytics.noHashtags': 'لا شيء',
   'analytics.formatXlsx': 'إكسل (.xlsx)',
   'analytics.formatOds': 'أوبن دوكيومنت (.ods)',
   'analytics.formatCsv': 'CSV (.csv)',
@@ -98,6 +99,7 @@ export const ar: Record<keyof typeof en, string> = {
   'column.replies': 'الردود',
   'column.reactions': 'التفاعلات',
   'column.actions': 'الإجراءات',
+  'column.hashtags': 'الوسوم',
 
   'poll.refreshed': 'تم تحديث نتائج الاستطلاع من تيليجرام.',
   'poll.refreshFailed': 'فشل التحديث',
@@ -219,6 +221,7 @@ export const ar: Record<keyof typeof en, string> = {
   'sheet.messages': 'الرسائل',
   'sheet.replies': 'الردود',
   'sheet.reactions': 'التفاعلات',
+  'sheet.hashtags': 'الوسوم',
   'sheet.option': 'الخيار',
   'sheet.votes': 'الأصوات',
   'sheet.percent': 'النسبة',

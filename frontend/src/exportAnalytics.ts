@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { AnalyticsRow } from './api'
+import { formatHashtags } from './hashtags'
 import type { I18nValue } from './i18n/context'
 
 export type ExportFormat = 'csv' | 'xlsx' | 'ods'
@@ -15,6 +16,7 @@ function headers(t: Translate) {
     t('sheet.messages'),
     t('sheet.replies'),
     t('sheet.reactions'),
+    t('sheet.hashtags'),
   ]
 }
 
@@ -27,6 +29,7 @@ function toSheetRows(rows: AnalyticsRow[], t: Translate) {
     [t('sheet.messages')]: Number(r.messages_count) || 0,
     [t('sheet.replies')]: Number(r.replies_count) || 0,
     [t('sheet.reactions')]: Number(r.reactions_count) || 0,
+    [t('sheet.hashtags')]: formatHashtags(r.hashtag_count),
   }))
 }
 

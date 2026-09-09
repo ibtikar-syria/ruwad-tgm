@@ -83,6 +83,7 @@ export const en = {
   'analytics.loadFailed': 'Failed to load analytics',
   'analytics.empty': 'No member activity yet.',
   'analytics.unassigned': 'unassigned',
+  'analytics.noHashtags': 'none',
   'analytics.formatXlsx': 'Excel (.xlsx)',
   'analytics.formatOds': 'OpenDocument (.ods)',
   'analytics.formatCsv': 'CSV (.csv)',
@@ -96,6 +97,7 @@ export const en = {
   'column.replies': 'Replies',
   'column.reactions': 'Reactions',
   'column.actions': 'Actions',
+  'column.hashtags': 'Hashtags',
 
   'poll.refreshed': 'Poll totals refreshed from Telegram.',
   'poll.refreshFailed': 'Refresh failed',
@@ -218,6 +220,7 @@ export const en = {
   'sheet.messages': 'Messages',
   'sheet.replies': 'Replies',
   'sheet.reactions': 'Reactions',
+  'sheet.hashtags': 'Hashtags',
   'sheet.option': 'Option',
   'sheet.votes': 'Votes',
   'sheet.percent': 'Percent',

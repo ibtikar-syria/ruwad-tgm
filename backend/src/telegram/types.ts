@@ -46,6 +46,12 @@ export type TelegramPollAnswer = {
   option_ids: number[]
 }
 
+export type TelegramMessageEntity = {
+  type: string
+  offset: number
+  length: number
+}
+
 export type TelegramMessage = {
   message_id: number
   from?: TelegramUser
@@ -53,6 +59,8 @@ export type TelegramMessage = {
   date: number
   text?: string
   caption?: string
+  entities?: TelegramMessageEntity[]
+  caption_entities?: TelegramMessageEntity[]
   message_thread_id?: number
   reply_to_message?: TelegramMessage
   is_topic_message?: boolean

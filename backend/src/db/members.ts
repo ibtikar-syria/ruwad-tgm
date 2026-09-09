@@ -1,5 +1,6 @@
 import type { CloudflareBindings, MemberRow } from '../types'
 import type { TelegramChat, TelegramUser } from '../telegram/types'
+import { addHashtags, parseHashtagCounts } from '../telegram/hashtags'
 
 function displayName(user: TelegramUser): string {
   const parts = [user.first_name, user.last_name].filter(Boolean)
@@ -157,16 +158,39 @@ export async function incrementStats(
   db: D1Database,
   chatId: string,
   telegramUserId: string,
-  deltas: { messages?: number; replies?: number; reactions?: number },
+  deltas: {
+    messages?: number
+    replies?: number
+    reactions?: number
+    /** Unique hashtags in one message; each adds 1 to its tally */
+    hashtags?: string[]
+  },
 ): Promise<void> {
   await ensureMemberStats(db, chatId, telegramUserId)
   const now = new Date().toISOString()
+
+  // Tallies live in a JSON object, so they need a read-modify-write rather than
+  // an arithmetic delta. Null leaves the stored value untouched.
+  let hashtagJson: string | null = null
+  const tags = deltas.hashtags ?? []
+  if (tags.length > 0) {
+    const row = await db
+      .prepare(
+        `SELECT hashtag_count FROM member_stats
+         WHERE chat_id = ? AND telegram_user_id = ?`,
+      )
+      .bind(chatId, telegramUserId)
+      .first<{ hashtag_count: string | null }>()
+    hashtagJson = JSON.stringify(addHashtags(parseHashtagCounts(row?.hashtag_count), tags))
+  }
+
   await db
     .prepare(
       `UPDATE member_stats SET
          messages_count = MAX(0, messages_count + ?),
          replies_count = MAX(0, replies_count + ?),
          reactions_count = MAX(0, reactions_count + ?),
+         hashtag_count = COALESCE(?, hashtag_count),
          updated_at = ?
        WHERE chat_id = ? AND telegram_user_id = ?`,
     )
@@ -174,6 +198,7 @@ export async function incrementStats(
       deltas.messages ?? 0,
       deltas.replies ?? 0,
       deltas.reactions ?? 0,
+      hashtagJson,
       now,
       chatId,
       telegramUserId,

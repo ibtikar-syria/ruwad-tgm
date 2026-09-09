@@ -77,6 +77,8 @@ export type AnalyticsRow = {
   messages_count: number
   replies_count: number
   reactions_count: number
+  /** Hashtag -> number of that member's messages containing it */
+  hashtag_count: Record<string, number>
 }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''

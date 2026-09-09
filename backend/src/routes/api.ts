@@ -18,6 +18,7 @@ import {
 } from '../telegram/api'
 import { ensureGeneralTopic, upsertTopic } from '../db/members'
 import { applyPollUpdateToMessage, upsertPoll } from '../db/polls'
+import { mergeHashtagCounts, parseHashtagCounts } from '../telegram/hashtags'
 import { extractTopicTitleFromJson } from '../telegram/topicTitle'
 import type { TelegramPoll } from '../telegram/types'
 
@@ -839,14 +840,32 @@ apiRoutes.get('/analytics', async (c) => {
        m.username,
        COALESCE(SUM(s.messages_count), 0) AS messages_count,
        COALESCE(SUM(s.replies_count), 0) AS replies_count,
-       COALESCE(SUM(s.reactions_count), 0) AS reactions_count
+       COALESCE(SUM(s.reactions_count), 0) AS reactions_count,
+       json_group_array(COALESCE(s.hashtag_count, '{}')) AS hashtag_counts
      FROM members m
      LEFT JOIN member_stats s ON s.telegram_user_id = m.telegram_user_id
      GROUP BY m.telegram_user_id
      ORDER BY messages_count DESC, replies_count DESC, reactions_count DESC`,
-  ).all()
+  ).all<Record<string, unknown> & { hashtag_counts: string }>()
 
-  return c.json({ analytics: rows.results ?? [] })
+  // Each member can have a row per chat, so the per-chat objects are summed here
+  const analytics = (rows.results ?? []).map(({ hashtag_counts, ...row }) => {
+    let perChat: unknown[] = []
+    try {
+      perChat = JSON.parse(hashtag_counts) as unknown[]
+    } catch {
+      perChat = []
+    }
+    return {
+      ...row,
+      hashtag_count: mergeHashtagCounts(
+        {},
+        ...perChat.map((raw) => parseHashtagCounts(typeof raw === 'string' ? raw : null)),
+      ),
+    }
+  })
+
+  return c.json({ analytics })
 })
 
 apiRoutes.get('/analytics/:chatId', async (c) => {
@@ -859,7 +878,8 @@ apiRoutes.get('/analytics/:chatId', async (c) => {
        m.username,
        COALESCE(s.messages_count, 0) AS messages_count,
        COALESCE(s.replies_count, 0) AS replies_count,
-       COALESCE(s.reactions_count, 0) AS reactions_count
+       COALESCE(s.reactions_count, 0) AS reactions_count,
+       COALESCE(s.hashtag_count, '{}') AS hashtag_count
      FROM group_members gm
      JOIN members m ON m.telegram_user_id = gm.telegram_user_id
      LEFT JOIN member_stats s
@@ -868,9 +888,14 @@ apiRoutes.get('/analytics/:chatId', async (c) => {
      ORDER BY messages_count DESC, replies_count DESC, reactions_count DESC`,
   )
     .bind(chatId)
-    .all()
+    .all<Record<string, unknown> & { hashtag_count: string }>()
 
-  return c.json({ chat_id: chatId, analytics: rows.results ?? [] })
+  const analytics = (rows.results ?? []).map((row) => ({
+    ...row,
+    hashtag_count: parseHashtagCounts(row.hashtag_count),
+  }))
+
+  return c.json({ chat_id: chatId, analytics })
 })
 
 apiRoutes.get('/settings', async (c) => {

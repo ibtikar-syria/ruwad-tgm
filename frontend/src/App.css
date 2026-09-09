@@ -609,6 +609,34 @@ button:focus-visible {
   background: var(--topic-list-bg);
 }
 
+.hashtag-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  max-width: 22rem;
+}
+
+.hashtag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.hashtag-name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.hashtag-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .topic-row {
   display: flex;
   align-items: stretch;

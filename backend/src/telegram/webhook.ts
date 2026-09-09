@@ -16,6 +16,7 @@ import {
 import type { CloudflareBindings } from '../types'
 import { deleteMessage, sendMessage, sendPoll } from './api'
 import { isPollViaBotEnabled } from '../db/settings'
+import { extractHashtags } from './hashtags'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
 import { isPollCommand, parsePollCommand } from './pollCommand'
 import { extractTopicTitle } from './topicTitle'
@@ -356,6 +357,7 @@ async function storeGroupMessage(
     await incrementStats(env.MAIN_DB, chatId, fromId, {
       messages: 1,
       replies: message.reply_to_message ? 1 : 0,
+      hashtags: extractHashtags(message),
     })
   }
 }

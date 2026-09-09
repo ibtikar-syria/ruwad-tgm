@@ -2,6 +2,23 @@ import { useEffect, useState } from 'react'
 import { api, type AnalyticsRow, type Group } from '../api'
 import { exportAnalyticsSheet, type ExportFormat } from '../exportAnalytics'
 import { useI18n } from '../i18n/context'
+import { sortedHashtags, type HashtagCounts } from '../hashtags'
+
+function HashtagCell({ counts, empty }: { counts: HashtagCounts; empty: string }) {
+  const tags = sortedHashtags(counts)
+  if (tags.length === 0) return <span className="muted">{empty}</span>
+  return (
+    <div className="hashtag-cell">
+      {tags.map(([tag, count]) => (
+        <span key={tag} className="hashtag-chip">
+          {/* bdi keeps the leading # attached to Latin tags inside RTL text */}
+          <bdi className="hashtag-name">{tag}</bdi>
+          <span className="hashtag-count">{count}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 export function AnalyticsPage() {
   const { t } = useI18n()
@@ -117,12 +134,13 @@ export function AnalyticsPage() {
                 <th>{t('column.messages')}</th>
                 <th>{t('column.replies')}</th>
                 <th>{t('column.reactions')}</th>
+                <th>{t('column.hashtags')}</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="muted empty-cell">
+                  <td colSpan={6} className="muted empty-cell">
                     {t('analytics.empty')}
                   </td>
                 </tr>
@@ -141,6 +159,9 @@ export function AnalyticsPage() {
                   <td data-label={t('column.messages')}>{r.messages_count}</td>
                   <td data-label={t('column.replies')}>{r.replies_count}</td>
                   <td data-label={t('column.reactions')}>{r.reactions_count}</td>
+                  <td data-label={t('column.hashtags')}>
+                    <HashtagCell counts={r.hashtag_count} empty={t('analytics.noHashtags')} />
+                  </td>
                 </tr>
               ))}
             </tbody>
