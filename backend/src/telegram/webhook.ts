@@ -72,6 +72,51 @@ async function syncTopicFromMessage(
   })
 }
 
+async function storeBotOutboundMessage(
+  env: CloudflareBindings,
+  message: TelegramMessage,
+): Promise<void> {
+  // Bots never get their own messages on the webhook — always persist from the API response
+  if (message.chat.type === 'private') {
+    await storePrivateMessage(env.TELEGRAM_MESSAGES_DB, message)
+    if (message.poll) {
+      const chatId = String(message.chat.id)
+      const id = `${chatId}:${message.message_id}`
+      await upsertPoll(env.TELEGRAM_MESSAGES_DB, message.poll, {
+        chatId,
+        messageDbId: id,
+        telegramMessageId: String(message.message_id),
+      })
+    }
+    return
+  }
+  if (isGroupChat(message.chat.type)) {
+    await storeGroupMessage(env, message, { countStats: false, skipStats: true })
+  }
+}
+
+async function sendAndStoreBotMessage(
+  env: CloudflareBindings,
+  params: {
+    chat_id: number | string
+    text: string
+    parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2'
+    reply_to_message_id?: number
+    message_thread_id?: number
+  },
+): Promise<{ ok: boolean; result?: TelegramMessage; description?: string }> {
+  if (!env.TELEGRAM_BOT_TOKEN) {
+    return { ok: false, description: 'TELEGRAM_BOT_TOKEN is not configured' }
+  }
+  const result = await sendMessage(env.TELEGRAM_BOT_TOKEN, params)
+  if (!result.ok || !result.result) {
+    return { ok: false, description: result.description }
+  }
+  const message = result.result as TelegramMessage
+  await storeBotOutboundMessage(env, message)
+  return { ok: true, result: message }
+}
+
 async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN) return
 
@@ -85,7 +130,7 @@ async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage):
     savedName = row?.custom_name ?? null
   }
 
-  const result = await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+  const result = await sendAndStoreBotMessage(env, {
     chat_id: message.chat.id,
     text: formatInfoMessageHtml(message, { savedName }),
     parse_mode: 'HTML',
@@ -96,11 +141,6 @@ async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage):
   })
   if (!result.ok) {
     console.error('Failed to reply with /info', result.description)
-    return
-  }
-  // Keep the private transcript complete when /info is used in a DM
-  if (message.chat.type === 'private' && result.result) {
-    await storePrivateMessage(env.TELEGRAM_MESSAGES_DB, result.result as TelegramMessage)
   }
 }
 
@@ -111,7 +151,7 @@ async function handlePollCommand(
   if (!env.TELEGRAM_BOT_TOKEN || !message.text) return
   const parsed = parsePollCommand(message.text)
   if (!parsed) {
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    await sendAndStoreBotMessage(env, {
       chat_id: message.chat.id,
       text:
         'Usage:\n<code>/poll Question\nOption 1\nOption 2</code>\n\nOr:\n<code>/poll Question | Opt1 | Opt2</code>\n\nUse <code>/pollm</code> to allow multiple answers.\nPolls are public (not anonymous) so votes can be tracked.',
@@ -137,7 +177,7 @@ async function handlePollCommand(
 
   if (!result.ok || !result.result) {
     console.error('Failed to send poll', result.description)
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    await sendAndStoreBotMessage(env, {
       chat_id: message.chat.id,
       text: `Could not create poll: ${result.description ?? 'unknown error'}`,
       reply_to_message_id: message.message_id,
@@ -148,11 +188,7 @@ async function handlePollCommand(
     return
   }
 
-  // Bots do not receive their own messages via webhook — store from the API response
-  await storeGroupMessage(env, result.result as TelegramMessage, {
-    countStats: false,
-    skipStats: true,
-  })
+  await storeBotOutboundMessage(env, result.result as TelegramMessage)
 }
 
 function senderLabel(user?: TelegramUser): string {
@@ -246,7 +282,7 @@ async function reclaimUserPollAsBotPoll(
       return 'reclaimed'
     }
 
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    await sendAndStoreBotMessage(env, {
       chat_id: message.chat.id,
       text:
         'Poll via Bot is enabled, but I could not delete this poll. Make me a group admin with <b>Delete messages</b> permission.',
@@ -288,7 +324,7 @@ async function reclaimUserPollAsBotPoll(
 
   if (!sent.ok || !sent.result) {
     console.error('Failed to repost poll via bot', sent.description)
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    await sendAndStoreBotMessage(env, {
       chat_id: message.chat.id,
       text: `Deleted the poll from ${senderLabel(sender)} but failed to repost it: ${sent.description ?? 'unknown error'}`,
       ...(typeof message.message_thread_id === 'number'
@@ -298,13 +334,9 @@ async function reclaimUserPollAsBotPoll(
     return 'reclaimed'
   }
 
-  // Bots do not receive their own messages via webhook — store from the API response
-  await storeGroupMessage(env, sent.result as TelegramMessage, {
-    countStats: false,
-    skipStats: true,
-  })
+  await storeBotOutboundMessage(env, sent.result as TelegramMessage)
 
-  const note = await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+  await sendAndStoreBotMessage(env, {
     chat_id: message.chat.id,
     text: `Poll from ${senderLabel(sender)} was reposted by the bot so votes can be tracked.`,
     ...(typeof message.message_thread_id === 'number'
@@ -312,13 +344,6 @@ async function reclaimUserPollAsBotPoll(
       : {}),
     reply_to_message_id: sent.result.message_id,
   })
-
-  if (note.ok && note.result) {
-    await storeGroupMessage(env, note.result as TelegramMessage, {
-      countStats: false,
-      skipStats: true,
-    })
-  }
 
   return 'reclaimed'
 }
