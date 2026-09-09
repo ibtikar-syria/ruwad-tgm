@@ -33,6 +33,15 @@ export function RequireAuth() {
   return <Outlet />
 }
 
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" strokeLinecap="round" />
+      <path d="M10 17l5-5-5-5M15 12H3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function AppShell() {
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -52,17 +61,6 @@ export function AppShell() {
       <header className="topnav">
         <div className="topnav-bar">
           <div className="brand">{t('app.brand')}</div>
-          <LanguageToggle />
-          <ThemeToggle />
-          <button
-            type="button"
-            className="nav-toggle"
-            aria-label={menuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <span className="nav-toggle-bars" aria-hidden="true" />
-          </button>
           <nav className="topnav-links">
             <NavLink to="/chats" onClick={closeMenu}>
               {t('nav.chats')}
@@ -73,10 +71,29 @@ export function AppShell() {
             <NavLink to="/settings" onClick={closeMenu}>
               {t('nav.settings')}
             </NavLink>
-            <button type="button" className="linkish topnav-logout" onClick={logout}>
-              {t('auth.logout')}
-            </button>
           </nav>
+          <div className="topnav-actions">
+            <LanguageToggle />
+            <ThemeToggle />
+            <button
+              type="button"
+              className="topnav-logout"
+              onClick={logout}
+              aria-label={t('auth.logout')}
+              title={t('auth.logout')}
+            >
+              <LogoutIcon />
+            </button>
+          </div>
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label={menuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span className="nav-toggle-bars" aria-hidden="true" />
+          </button>
         </div>
       </header>
       <main className="shell-main">

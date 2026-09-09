@@ -387,8 +387,40 @@ button:focus-visible {
   background: var(--accent-soft);
 }
 
-.topnav-logout {
+.topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
   margin-inline-start: auto;
+}
+
+.topnav-logout {
+  width: 2.1rem;
+  height: 2.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  transition: background 0.12s ease;
+}
+
+.topnav-logout:hover {
+  background: var(--error-bg);
+}
+
+.topnav-logout svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* The arrow points out of the door, so it follows the writing direction */
+[dir='rtl'] .topnav-logout svg {
+  transform: scaleX(-1);
 }
 
 .lang-toggle {
@@ -1522,10 +1554,42 @@ button.danger {
 
   .topnav-bar {
     padding: 0.65rem 0.85rem;
+    /* The collapsed menu wraps onto its own line below the bar */
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
+  /* Four controls plus the brand is tight at phone widths, so the brand
+     truncates rather than colliding with the toggles */
   .brand {
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topnav-actions {
+    gap: 0.25rem;
+  }
+
+  .lang-toggle button {
+    min-width: 1.8rem;
+    height: 1.6rem;
+    padding: 0 0.25rem;
+  }
+
+  .theme-toggle button {
+    width: 1.6rem;
+    height: 1.6rem;
+  }
+
+  .topnav-logout {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
+  .nav-toggle {
+    width: 2.2rem;
+    height: 2.2rem;
   }
 
   .topnav-links {
@@ -1534,7 +1598,10 @@ button.danger {
     align-items: stretch;
     gap: 0.15rem;
     flex: none;
-    padding: 0.35rem 0.85rem 0.85rem;
+    order: 1;
+    width: 100%;
+    margin-top: 0.15rem;
+    padding: 0.5rem 0 0;
     border-top: 1px solid var(--border);
   }
 
@@ -1542,9 +1609,7 @@ button.danger {
     display: flex;
   }
 
-  .topnav-links a,
-  .topnav-logout {
-    margin-inline-start: 0;
+  .topnav-links a {
     width: 100%;
     text-align: start;
     padding: 0.7rem 0.85rem;
