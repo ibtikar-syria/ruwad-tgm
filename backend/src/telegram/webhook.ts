@@ -25,6 +25,7 @@ import {
 } from './anonymousAdmin'
 import { formatInfoMessageHtml, isInfoCommand } from './info'
 import { isPollCommand, parsePollCommand } from './pollCommand'
+import { handlePrivateRegistration } from './register'
 import { extractTopicTitle } from './topicTitle'
 import type {
   TelegramMessage,
@@ -408,6 +409,11 @@ async function handleMessage(
         chatId,
       )
       .run()
+
+    // Registration owns /start, /name, and name replies — skip other DM commands then
+    if (countStats && (await handlePrivateRegistration(env, message))) {
+      return
+    }
 
     if (shouldReplyInfo) {
       await replyWithInfo(env, message)
