@@ -6,6 +6,7 @@ import {
   setMemberCustomName,
 } from '../db/botDm'
 import { upsertMember } from '../db/members'
+import { storePrivateMessage } from '../db/privateMessages'
 import { sendMessage } from './api'
 import type { TelegramMessage, TelegramUser } from './types'
 
@@ -56,6 +57,10 @@ async function reply(
   })
   if (!result.ok) {
     console.error('Failed to reply in private registration chat', result.description)
+    return
+  }
+  if (result.result) {
+    await storePrivateMessage(env.TELEGRAM_MESSAGES_DB, result.result as TelegramMessage)
   }
 }
 

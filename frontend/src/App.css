@@ -522,6 +522,41 @@ button:focus-visible {
   height: 100%;
 }
 
+.chats-page {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.chats-view-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.55rem 1rem 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.chats-view-tab {
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px 8px 0 0;
+  padding: 0.55rem 0.95rem;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+
+.chats-view-tab:hover {
+  color: var(--text);
+  background: var(--hover-soft);
+}
+
+.chats-view-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  background: transparent;
+}
+
 .groups-layout {
   height: 100%;
   display: grid;
@@ -855,6 +890,26 @@ button:focus-visible {
   border-end-start-radius: 4px;
   padding: 0.55rem 0.75rem 0.65rem;
   box-shadow: var(--bubble-shadow);
+}
+
+.bubble-out {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-radius: 12px;
+  border-end-end-radius: 4px;
+}
+
+.private-composer {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.private-composer input {
+  flex: 1;
+  min-width: 0;
 }
 
 .bubble-head {

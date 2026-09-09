@@ -38,6 +38,9 @@ export const en = {
   'language.switchToEn': 'Switch to English',
 
   'chats.pane': 'Chats',
+  'chats.views': 'Chat views',
+  'chats.tabGroups': 'Groups',
+  'chats.tabPrivate': 'Private',
   'chats.empty': 'No chats yet. Add the bot to a Telegram group.',
   'chats.select': 'Select a chat',
   'chats.selectToView': 'Select a chat to view messages.',
@@ -70,6 +73,19 @@ export const en = {
   'chats.loadFailed': 'Failed to load chats',
   'chats.messagesFailed': 'Failed to load messages',
   'chats.refreshFailed': 'Failed to refresh',
+
+  'private.pane': 'Private messages',
+  'private.empty': 'No private messages yet. Members appear here when they message the bot.',
+  'private.select': 'Select a conversation',
+  'private.selectToView': 'Select a private chat to view messages.',
+  'private.back': 'Back to private chats',
+  'private.loadFailed': 'Failed to load private chats',
+  'private.messagesFailed': 'Failed to load private messages',
+  'private.sendFailed': 'Failed to send message',
+  'private.bot': 'Bot',
+  'private.composerPlaceholder': 'Message via bot…',
+  'private.send': 'Send',
+  'private.sending': 'Sending…',
 
   'analytics.title': 'Analytics',
   'analytics.subtitle':

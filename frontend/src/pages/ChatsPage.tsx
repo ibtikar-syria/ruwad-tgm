@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { api, type ChatMessage, type Group, type Topic } from '../api'
 import { PollCard } from '../components/PollCard'
 import { useI18n, type I18nValue } from '../i18n/context'
+import { PrivateChatsPanel } from './PrivateChatsPanel'
 
 function formatTime(iso: string, locale: string): string {
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
@@ -54,6 +55,34 @@ function isForumChat(chat: Group): boolean {
 }
 
 export function ChatsPage() {
+  const { t } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view') === 'private' ? 'private' : 'groups'
+
+  if (view === 'private') {
+    return (
+      <div className="chats-page">
+        <nav className="chats-view-tabs" aria-label={t('chats.views')}>
+          <button
+            type="button"
+            className="chats-view-tab"
+            onClick={() => setSearchParams({})}
+          >
+            {t('chats.tabGroups')}
+          </button>
+          <button type="button" className="chats-view-tab active" aria-current="page">
+            {t('chats.tabPrivate')}
+          </button>
+        </nav>
+        <PrivateChatsPanel />
+      </div>
+    )
+  }
+
+  return <GroupsChatsPanel />
+}
+
+function GroupsChatsPanel() {
   const { t, dir, locale } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedChatId = searchParams.get('chat')
@@ -245,6 +274,19 @@ export function ChatsPage() {
   }
 
   return (
+    <div className="chats-page">
+      <nav className="chats-view-tabs" aria-label={t('chats.views')}>
+        <button type="button" className="chats-view-tab active" aria-current="page">
+          {t('chats.tabGroups')}
+        </button>
+        <button
+          type="button"
+          className="chats-view-tab"
+          onClick={() => setSearchParams({ view: 'private' })}
+        >
+          {t('chats.tabPrivate')}
+        </button>
+      </nav>
     <div className={`groups-layout${chatOpenOnMobile ? ' chat-open' : ''}`}>
       <aside className="group-list">
         <div className="pane-header">{t('chats.pane')}</div>
@@ -483,6 +525,7 @@ export function ChatsPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

@@ -51,6 +51,15 @@ export type MemberStatsRow = {
   updated_at: string
 }
 
+export type PrivateMessageRow = {
+  id: string
+  message_json: string
+  message_text: string | null
+  chat_id: string | null
+  notes: string | null
+  created_at: string
+}
+
 export type GroupMessageRow = {
   id: string
   message_json: string

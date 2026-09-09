@@ -1,4 +1,4 @@
--- All Private Messages table
+-- All Private Messages table (DMs with the bot; chat_id is the user id)
 CREATE TABLE IF NOT EXISTS all_messages_private (
     id TEXT PRIMARY KEY,
     message_json TEXT NOT NULL,
@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS all_messages_private (
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_messages_private_chat_created
+    ON all_messages_private (chat_id, created_at);
 
 -- All Group Messages table
 CREATE TABLE IF NOT EXISTS all_messages_groups (

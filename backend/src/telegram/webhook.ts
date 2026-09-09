@@ -13,6 +13,7 @@ import {
   upsertPoll,
   upsertPollVote,
 } from '../db/polls'
+import { storePrivateMessage } from '../db/privateMessages'
 import type { CloudflareBindings } from '../types'
 import { deleteMessage, sendMessage, sendPoll } from './api'
 import { isPollViaBotEnabled } from '../db/settings'
@@ -95,6 +96,11 @@ async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage):
   })
   if (!result.ok) {
     console.error('Failed to reply with /info', result.description)
+    return
+  }
+  // Keep the private transcript complete when /info is used in a DM
+  if (message.chat.type === 'private' && result.result) {
+    await storePrivateMessage(env.TELEGRAM_MESSAGES_DB, result.result as TelegramMessage)
   }
 }
 
@@ -405,21 +411,9 @@ async function handleMessage(
 
   if (chat.type === 'private') {
     if (!message.from) return
-    const id = `${chatId}:${message.message_id}`
-    await env.TELEGRAM_MESSAGES_DB.prepare(
-      `INSERT INTO all_messages_private (id, message_json, message_text, chat_id, notes, created_at)
-       VALUES (?, ?, ?, ?, NULL, datetime('now'))
-       ON CONFLICT(id) DO UPDATE SET
-         message_json = excluded.message_json,
-         message_text = excluded.message_text`,
-    )
-      .bind(
-        id,
-        JSON.stringify(message),
-        message.text ?? message.caption ?? null,
-        chatId,
-      )
-      .run()
+
+    // Every inbound DM is persisted so admins can audit the conversation
+    await storePrivateMessage(env.TELEGRAM_MESSAGES_DB, message)
 
     // Registration owns /start, /name, and name replies — skip other DM commands then
     if (countStats && (await handlePrivateRegistration(env, message))) {
