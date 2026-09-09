@@ -14,13 +14,15 @@ import {
   deleteWebhook,
   forwardMessage,
   getWebhookInfo,
+  sendMessage,
   setWebhook,
 } from '../telegram/api'
 import { ensureGeneralTopic, upsertTopic } from '../db/members'
+import { storePrivateMessage } from '../db/privateMessages'
 import { applyPollUpdateToMessage, upsertPoll } from '../db/polls'
 import { mergeHashtagCounts, parseHashtagCounts } from '../telegram/hashtags'
 import { extractTopicTitleFromJson } from '../telegram/topicTitle'
-import type { TelegramPoll } from '../telegram/types'
+import type { TelegramMessage, TelegramPoll } from '../telegram/types'
 
 export const apiRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: AppVariables }>()
 
@@ -331,6 +333,221 @@ apiRoutes.get('/groups/:chatId/messages', async (c) => {
           : null,
       }
     }),
+  })
+})
+
+apiRoutes.get('/private-chats', async (c) => {
+  const rows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT
+       chat_id,
+       MAX(created_at) AS last_message_at,
+       COUNT(*) AS message_count
+     FROM all_messages_private
+     WHERE chat_id IS NOT NULL AND chat_id != ''
+     GROUP BY chat_id
+     ORDER BY last_message_at DESC`,
+  ).all<{ chat_id: string; last_message_at: string; message_count: number }>()
+
+  const chats = rows.results ?? []
+  if (chats.length === 0) {
+    return c.json({ chats: [] })
+  }
+
+  const chatIds = chats.map((r) => r.chat_id)
+  const placeholders = chatIds.map(() => '?').join(',')
+
+  const previewRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT p.chat_id, p.message_text
+     FROM all_messages_private p
+     INNER JOIN (
+       SELECT chat_id, MAX(created_at) AS last_at
+       FROM all_messages_private
+       WHERE chat_id IN (${placeholders})
+       GROUP BY chat_id
+     ) latest
+       ON latest.chat_id = p.chat_id AND latest.last_at = p.created_at`,
+  )
+    .bind(...chatIds)
+    .all<{ chat_id: string; message_text: string | null }>()
+
+  const previewByChat = new Map<string, string | null>()
+  for (const row of previewRows.results ?? []) {
+    previewByChat.set(row.chat_id, row.message_text)
+  }
+
+  const members = await c.env.MAIN_DB.prepare(
+    `SELECT * FROM members WHERE telegram_user_id IN (${placeholders})`,
+  )
+    .bind(...chatIds)
+    .all<MemberRow>()
+
+  const membersById: Record<string, MemberRow> = {}
+  for (const m of members.results ?? []) {
+    membersById[m.telegram_user_id] = m
+  }
+
+  return c.json({
+    chats: chats.map((row) => {
+      const member = membersById[row.chat_id]
+      return {
+        chat_id: row.chat_id,
+        last_message_at: row.last_message_at,
+        message_count: row.message_count,
+        last_message_text: previewByChat.get(row.chat_id) ?? null,
+        display_name: member?.custom_name || member?.display_name || row.chat_id,
+        custom_name: member?.custom_name ?? null,
+        username: member?.username ?? null,
+        membership_id: member?.membership_id ?? null,
+      }
+    }),
+  })
+})
+
+apiRoutes.get('/private-chats/:chatId/messages', async (c) => {
+  const chatId = c.req.param('chatId')
+  const limit = Math.min(Number(c.req.query('limit') ?? 100), 200)
+  const before = c.req.query('before')
+
+  const query = before
+    ? c.env.TELEGRAM_MESSAGES_DB.prepare(
+        `SELECT id, message_json, message_text, chat_id, notes, created_at
+         FROM all_messages_private
+         WHERE chat_id = ? AND created_at < ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      ).bind(chatId, before, limit)
+    : c.env.TELEGRAM_MESSAGES_DB.prepare(
+        `SELECT id, message_json, message_text, chat_id, notes, created_at
+         FROM all_messages_private
+         WHERE chat_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      ).bind(chatId, limit)
+
+  const rows = await query.all<{
+    id: string
+    message_json: string
+    message_text: string | null
+    chat_id: string | null
+    notes: string | null
+    created_at: string
+  }>()
+
+  const member = await c.env.MAIN_DB.prepare(
+    `SELECT * FROM members WHERE telegram_user_id = ?`,
+  )
+    .bind(chatId)
+    .first<MemberRow>()
+
+  const messages = (rows.results ?? [])
+    .slice()
+    .reverse()
+    .map((m) => {
+      let fromBot = false
+      let fromId: string | null = null
+      let replyTo: { message_id?: number; text?: string } | null = null
+      try {
+        const parsed = JSON.parse(m.message_json) as {
+          from?: { id?: number; is_bot?: boolean; first_name?: string }
+          reply_to_message?: { message_id?: number; text?: string; caption?: string }
+        }
+        fromBot = Boolean(parsed.from?.is_bot)
+        fromId = parsed.from?.id != null ? String(parsed.from.id) : null
+        if (parsed.reply_to_message) {
+          replyTo = {
+            message_id: parsed.reply_to_message.message_id,
+            text: parsed.reply_to_message.text ?? parsed.reply_to_message.caption,
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+
+      return {
+        id: m.id,
+        chat_id: m.chat_id ?? chatId,
+        user_id: fromId ?? chatId,
+        text: m.message_text,
+        created_at: m.created_at,
+        from_bot: fromBot,
+        display_name: fromBot
+          ? 'Bot'
+          : member?.custom_name || member?.display_name || chatId,
+        username: fromBot ? null : (member?.username ?? null),
+        membership_id: fromBot ? null : (member?.membership_id ?? null),
+        custom_name: fromBot ? null : (member?.custom_name ?? null),
+        reply_to: replyTo,
+        message_json: m.message_json,
+      }
+    })
+
+  return c.json({
+    chat_id: chatId,
+    member: member
+      ? {
+          telegram_user_id: member.telegram_user_id,
+          display_name: member.display_name,
+          custom_name: member.custom_name,
+          username: member.username,
+          membership_id: member.membership_id,
+        }
+      : null,
+    messages,
+  })
+})
+
+apiRoutes.post('/private-chats/:chatId/messages', async (c) => {
+  const chatId = c.req.param('chatId')
+  if (!c.env.TELEGRAM_BOT_TOKEN) {
+    return c.json({ error: 'TELEGRAM_BOT_TOKEN is not configured' }, 500)
+  }
+
+  let body: { text?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
+
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  if (!text) {
+    return c.json({ error: 'text is required' }, 400)
+  }
+  if (text.length > 4096) {
+    return c.json({ error: 'text must be 4096 characters or fewer' }, 400)
+  }
+
+  const sent = await sendMessage(c.env.TELEGRAM_BOT_TOKEN, {
+    chat_id: chatId,
+    text,
+  })
+
+  if (!sent.ok || !sent.result) {
+    return c.json(
+      { error: sent.description ?? 'Failed to send message via Telegram' },
+      502,
+    )
+  }
+
+  const message = sent.result as TelegramMessage
+  await storePrivateMessage(c.env.TELEGRAM_MESSAGES_DB, message)
+
+  return c.json({
+    ok: true,
+    message: {
+      id: `${chatId}:${message.message_id}`,
+      chat_id: chatId,
+      user_id: message.from ? String(message.from.id) : 'bot',
+      text: message.text ?? text,
+      created_at: new Date((message.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+      from_bot: true,
+      display_name: 'Bot',
+      username: null,
+      membership_id: null,
+      custom_name: null,
+      reply_to: null,
+      message_json: JSON.stringify(message),
+    },
   })
 })
 

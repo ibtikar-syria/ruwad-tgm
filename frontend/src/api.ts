@@ -55,6 +55,32 @@ export type ChatMessage = {
   poll: MessagePoll | null
 }
 
+export type PrivateChat = {
+  chat_id: string
+  last_message_at: string
+  message_count: number
+  last_message_text: string | null
+  display_name: string
+  custom_name: string | null
+  username: string | null
+  membership_id: string | null
+}
+
+export type PrivateChatMessage = {
+  id: string
+  chat_id: string
+  user_id: string
+  text: string | null
+  created_at: string
+  from_bot: boolean
+  display_name: string
+  username: string | null
+  membership_id: string | null
+  custom_name: string | null
+  reply_to: { message_id?: number; text?: string } | null
+  message_json: string
+}
+
 export type Member = {
   id: string
   telegram_user_id: string
@@ -117,6 +143,29 @@ export const api = {
   logout: () =>
     request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   groups: () => request<{ groups: Group[] }>('/api/groups'),
+  privateChats: () => request<{ chats: PrivateChat[] }>('/api/private-chats'),
+  privateMessages: (chatId: string, opts?: { before?: string; limit?: number }) => {
+    const params = new URLSearchParams()
+    if (opts?.before) params.set('before', opts.before)
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    const qs = params.toString()
+    return request<{
+      chat_id: string
+      member: {
+        telegram_user_id: string
+        display_name: string | null
+        custom_name: string | null
+        username: string | null
+        membership_id: string | null
+      } | null
+      messages: PrivateChatMessage[]
+    }>(`/api/private-chats/${encodeURIComponent(chatId)}/messages${qs ? `?${qs}` : ''}`)
+  },
+  sendPrivateMessage: (chatId: string, text: string) =>
+    request<{ ok: boolean; message: PrivateChatMessage }>(
+      `/api/private-chats/${encodeURIComponent(chatId)}/messages`,
+      { method: 'POST', body: JSON.stringify({ text }) },
+    ),
   messages: (
     chatId: string,
     opts?: { before?: string; limit?: number; threadId?: string | null },

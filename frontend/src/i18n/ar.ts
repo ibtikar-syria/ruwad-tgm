@@ -40,6 +40,9 @@ export const ar: Record<keyof typeof en, string> = {
   'language.switchToEn': 'التبديل إلى الإنجليزية',
 
   'chats.pane': 'المحادثات',
+  'chats.views': 'عرض المحادثات',
+  'chats.tabGroups': 'المجموعات',
+  'chats.tabPrivate': 'الخاصة',
   'chats.empty': 'لا توجد محادثات بعد. أضف البوت إلى مجموعة على تيليجرام.',
   'chats.select': 'اختر محادثة',
   'chats.selectToView': 'اختر محادثة لعرض الرسائل.',
@@ -72,6 +75,19 @@ export const ar: Record<keyof typeof en, string> = {
   'chats.loadFailed': 'تعذّر تحميل المحادثات',
   'chats.messagesFailed': 'تعذّر تحميل الرسائل',
   'chats.refreshFailed': 'تعذّر التحديث',
+
+  'private.pane': 'الرسائل الخاصة',
+  'private.empty': 'لا توجد رسائل خاصة بعد. تظهر هنا عندما يراسل الأعضاء البوت.',
+  'private.select': 'اختر محادثة',
+  'private.selectToView': 'اختر محادثة خاصة لعرض الرسائل.',
+  'private.back': 'العودة إلى الرسائل الخاصة',
+  'private.loadFailed': 'تعذّر تحميل المحادثات الخاصة',
+  'private.messagesFailed': 'تعذّر تحميل الرسائل الخاصة',
+  'private.sendFailed': 'تعذّر إرسال الرسالة',
+  'private.bot': 'البوت',
+  'private.composerPlaceholder': 'رسالة عبر البوت…',
+  'private.send': 'إرسال',
+  'private.sending': 'جارٍ الإرسال…',
 
   'analytics.title': 'الإحصائيات',
   'analytics.subtitle':
