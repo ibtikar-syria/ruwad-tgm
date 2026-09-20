@@ -198,6 +198,17 @@ function senderLabel(user?: TelegramUser): string {
   return name || String(user.id)
 }
 
+/**
+ * Label for poll reclaim notices. Anonymous admins must not be shown as
+ * GroupAnonymousBot — Telegram hides their identity, so we only say "an admin".
+ */
+function pollSenderLabel(message: TelegramMessage, sender: TelegramUser): string {
+  if (isAnonymousAdminMessage(message)) {
+    return 'an admin'
+  }
+  return senderLabel(sender)
+}
+
 /** Real users plus anonymous admins (who arrive as a fake bot `from` + `sender_chat`). */
 function trackableSender(message: TelegramMessage): TelegramUser | null {
   if (isAnonymousAdminMessage(message)) {
@@ -326,7 +337,7 @@ async function reclaimUserPollAsBotPoll(
     console.error('Failed to repost poll via bot', sent.description)
     await sendAndStoreBotMessage(env, {
       chat_id: message.chat.id,
-      text: `Deleted the poll from ${senderLabel(sender)} but failed to repost it: ${sent.description ?? 'unknown error'}`,
+      text: `Deleted the poll from ${pollSenderLabel(message, sender)} but failed to repost it: ${sent.description ?? 'unknown error'}`,
       ...(typeof message.message_thread_id === 'number'
         ? { message_thread_id: message.message_thread_id }
         : {}),
@@ -338,7 +349,7 @@ async function reclaimUserPollAsBotPoll(
 
   await sendAndStoreBotMessage(env, {
     chat_id: message.chat.id,
-    text: `Poll from ${senderLabel(sender)} was reposted by the bot so votes can be tracked.`,
+    text: `Poll from ${pollSenderLabel(message, sender)} was reposted by the bot so votes can be tracked.`,
     ...(typeof message.message_thread_id === 'number'
       ? { message_thread_id: message.message_thread_id }
       : {}),
