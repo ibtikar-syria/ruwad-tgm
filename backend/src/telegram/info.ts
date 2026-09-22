@@ -17,7 +17,11 @@ export function isInfoCommand(text: string | undefined): boolean {
 
 export function formatInfoMessageHtml(
   message: TelegramMessage,
-  opts?: { savedName?: string | null },
+  opts?: {
+    savedName?: string | null
+    membershipId?: string | null
+    pendingMembershipId?: string | null
+  },
 ): string {
   const chat = message.chat
   const sender = message.from
@@ -55,9 +59,21 @@ export function formatInfoMessageHtml(
   }
 
   const savedName = opts?.savedName?.trim()
-  if (savedName) {
+  const membershipId = opts?.membershipId?.trim()
+  const pendingMembershipId = opts?.pendingMembershipId?.trim()
+  if (savedName || membershipId || pendingMembershipId) {
     lines.push('')
-    lines.push(`SavedName: ${escapeHtml(savedName)}`)
+    if (savedName) {
+      lines.push(`SavedName: ${escapeHtml(savedName)}`)
+    }
+    if (membershipId) {
+      lines.push(`MembershipID: <code>${escapeHtml(membershipId)}</code>`)
+    }
+    if (pendingMembershipId) {
+      lines.push(
+        `PendingMembershipID: <code>${escapeHtml(pendingMembershipId)}</code> (awaiting admin approval)`,
+      )
+    }
   }
 
   return lines.join('\n')

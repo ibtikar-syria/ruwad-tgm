@@ -17,6 +17,10 @@ import {
   sendMessage,
   setWebhook,
 } from '../telegram/api'
+import {
+  acceptPendingMembershipId,
+  rejectPendingMembershipId,
+} from '../db/botDm'
 import { ensureGeneralTopic, upsertTopic } from '../db/members'
 import { storePrivateMessage } from '../db/privateMessages'
 import { applyPollUpdateToMessage, upsertPoll } from '../db/polls'
@@ -833,6 +837,8 @@ apiRoutes.patch('/members/:telegramUserId', async (c) => {
   if (hasMembershipId) {
     assignments.push('membership_id = ?')
     values.push(normalize(body.membership_id))
+    // Admin override clears any user-submitted pending claim
+    assignments.push('pending_membership_id = NULL')
   }
   if (hasCustomName) {
     assignments.push('custom_name = ?')
@@ -857,6 +863,42 @@ apiRoutes.patch('/members/:telegramUserId', async (c) => {
     .first<MemberRow>()
 
   return c.json({ member })
+})
+
+/** Promote a user-submitted pending_membership_id into membership_id. */
+apiRoutes.post('/members/:telegramUserId/pending-membership/accept', async (c) => {
+  const telegramUserId = c.req.param('telegramUserId')
+  try {
+    const member = await acceptPendingMembershipId(c.env.MAIN_DB, telegramUserId)
+    return c.json({ member })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Accept failed'
+    if (message === 'No pending membership ID') {
+      return c.json({ error: message }, 404)
+    }
+    if (message.includes('not found')) {
+      return c.json({ error: 'Member not found' }, 404)
+    }
+    return c.json({ error: message }, 500)
+  }
+})
+
+/** Discard a user-submitted pending_membership_id without changing membership_id. */
+apiRoutes.post('/members/:telegramUserId/pending-membership/reject', async (c) => {
+  const telegramUserId = c.req.param('telegramUserId')
+  try {
+    const member = await rejectPendingMembershipId(c.env.MAIN_DB, telegramUserId)
+    return c.json({ member })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Reject failed'
+    if (message === 'No pending membership ID') {
+      return c.json({ error: message }, 404)
+    }
+    if (message.includes('not found')) {
+      return c.json({ error: 'Member not found' }, 404)
+    }
+    return c.json({ error: message }, 500)
+  }
 })
 
 /**

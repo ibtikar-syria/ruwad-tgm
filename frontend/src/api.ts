@@ -85,6 +85,7 @@ export type Member = {
   id: string
   telegram_user_id: string
   membership_id: string | null
+  pending_membership_id: string | null
   custom_name: string | null
   display_name: string | null
   username: string | null
@@ -199,6 +200,16 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(patch),
     }),
+  acceptPendingMembership: (telegramUserId: string) =>
+    request<{ member: Member }>(
+      `/api/members/${encodeURIComponent(telegramUserId)}/pending-membership/accept`,
+      { method: 'POST' },
+    ),
+  rejectPendingMembership: (telegramUserId: string) =>
+    request<{ member: Member }>(
+      `/api/members/${encodeURIComponent(telegramUserId)}/pending-membership/reject`,
+      { method: 'POST' },
+    ),
   importMembers: (
     rows: {
       telegram_user_id: string | null

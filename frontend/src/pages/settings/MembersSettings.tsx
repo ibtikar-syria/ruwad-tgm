@@ -32,6 +32,7 @@ export function MembersSettings() {
   const [drafts, setDrafts] = useState<Record<string, MemberDraft>>({})
   const [query, setQuery] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +69,7 @@ export function MembersSettings() {
         drafts[m.telegram_user_id]?.membership_id,
         drafts[m.telegram_user_id]?.custom_name,
         m.membership_id,
+        m.pending_membership_id,
         m.custom_name,
       ]
         .filter(Boolean)
@@ -87,6 +89,13 @@ export function MembersSettings() {
     }))
   }
 
+  function applyMember(telegramUserId: string, member: Member) {
+    setMembers((prev) =>
+      prev.map((m) => (m.telegram_user_id === telegramUserId ? { ...m, ...member } : m)),
+    )
+    setDrafts((prev) => ({ ...prev, [telegramUserId]: draftFor(member) }))
+  }
+
   async function saveMember(telegramUserId: string) {
     setSavingId(telegramUserId)
     setMessage(null)
@@ -97,12 +106,7 @@ export function MembersSettings() {
         membership_id: draft?.membership_id.trim() || null,
         custom_name: draft?.custom_name.trim() || null,
       })
-      setMembers((prev) =>
-        prev.map((m) =>
-          m.telegram_user_id === telegramUserId ? { ...m, ...res.member } : m,
-        ),
-      )
-      setDrafts((prev) => ({ ...prev, [telegramUserId]: draftFor(res.member) }))
+      applyMember(telegramUserId, res.member)
       setMessage(t('members.saved'))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('members.saveFailed'))
@@ -111,9 +115,41 @@ export function MembersSettings() {
     }
   }
 
+  async function acceptPending(telegramUserId: string) {
+    setPendingActionId(telegramUserId)
+    setMessage(null)
+    setError(null)
+    try {
+      const res = await api.acceptPendingMembership(telegramUserId)
+      applyMember(telegramUserId, res.member)
+      setMessage(t('members.pendingAccepted'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('members.pendingAcceptFailed'))
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  async function rejectPending(telegramUserId: string) {
+    setPendingActionId(telegramUserId)
+    setMessage(null)
+    setError(null)
+    try {
+      const res = await api.rejectPendingMembership(telegramUserId)
+      applyMember(telegramUserId, res.member)
+      setMessage(t('members.pendingRejected'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('members.pendingRejectFailed'))
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
   if (loading) {
     return <p className="muted settings-loading">{t('members.loading')}</p>
   }
+
+  const pendingCount = members.filter((m) => m.pending_membership_id?.trim()).length
 
   return (
     <div className="settings-stack">
@@ -126,6 +162,11 @@ export function MembersSettings() {
             <span className="status-chip status-neutral">
               {t('members.total', { count: members.length })}
             </span>
+            {pendingCount > 0 && (
+              <span className="status-chip status-pending">
+                {t('members.pendingTotal', { count: pendingCount })}
+              </span>
+            )}
           </div>
           <p className="muted">
             {t('members.descLead')} {t('members.descBulk')}{' '}
@@ -188,8 +229,16 @@ export function MembersSettings() {
                 const dirty =
                   draft.membership_id !== (m.membership_id ?? '') ||
                   draft.custom_name !== (m.custom_name ?? '')
+                const pending = m.pending_membership_id?.trim() || null
+                const busy =
+                  savingId === m.telegram_user_id || pendingActionId === m.telegram_user_id
                 return (
-                  <tr key={m.telegram_user_id} className={dirty ? 'row-dirty' : undefined}>
+                  <tr
+                    key={m.telegram_user_id}
+                    className={[dirty ? 'row-dirty' : '', pending ? 'row-pending' : '']
+                      .filter(Boolean)
+                      .join(' ') || undefined}
+                  >
                     <td data-label={t('column.member')}>
                       <div className="cell-stack">
                         <strong>{m.display_name || m.telegram_user_id}</strong>
@@ -207,17 +256,46 @@ export function MembersSettings() {
                       />
                     </td>
                     <td data-label={t('column.membershipId')}>
-                      <input
-                        value={draft.membership_id}
-                        onChange={(e) => updateDraft(m, 'membership_id', e.target.value)}
-                        placeholder={t('members.membershipIdPlaceholder')}
-                      />
+                      <div className="membership-cell">
+                        <input
+                          value={draft.membership_id}
+                          onChange={(e) => updateDraft(m, 'membership_id', e.target.value)}
+                          placeholder={t('members.membershipIdPlaceholder')}
+                        />
+                        {pending && (
+                          <div className="pending-membership">
+                            <span className="pending-membership-label">
+                              {t('members.pendingLabel')}:{' '}
+                              <code>{pending}</code>
+                            </span>
+                            <div className="button-row pending-membership-actions">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => acceptPending(m.telegram_user_id)}
+                              >
+                                {pendingActionId === m.telegram_user_id
+                                  ? t('common.working')
+                                  : t('members.acceptPending')}
+                              </button>
+                              <button
+                                type="button"
+                                className="danger"
+                                disabled={busy}
+                                onClick={() => rejectPending(m.telegram_user_id)}
+                              >
+                                {t('members.rejectPending')}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="actions-cell" data-label={t('column.actions')}>
                       <button
                         type="button"
                         className={dirty ? undefined : 'secondary'}
-                        disabled={savingId === m.telegram_user_id || !dirty}
+                        disabled={busy || !dirty}
                         onClick={() => saveMember(m.telegram_user_id)}
                       >
                         {savingId === m.telegram_user_id ? t('common.saving') : t('common.save')}
