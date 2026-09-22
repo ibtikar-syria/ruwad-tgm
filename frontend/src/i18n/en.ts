@@ -127,6 +127,12 @@ export const en = {
   'poll.hint':
     'Refresh pulls current option totals from Telegram. Named voters only appear for public polls created with /poll.',
   'poll.refreshVotes': 'Refresh votes',
+  'poll.close': 'Close poll',
+  'poll.closing': 'Closing…',
+  'poll.confirmClose':
+    'Close this poll on Telegram? People will no longer be able to vote. This cannot be undone.',
+  'poll.closedOk': 'Poll closed on Telegram.',
+  'poll.closeFailed': 'Failed to close poll',
   'poll.exportVotes': 'Export votes',
   'poll.exportFormat': 'Export format',
 

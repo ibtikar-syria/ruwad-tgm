@@ -9,6 +9,7 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
   const [poll, setPoll] = useState(initial)
   const [exporting, setExporting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('xlsx')
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
@@ -22,6 +23,7 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
     (poll.votes ?? []).filter((v) => v.option_ids.includes(idx)),
   )
   const hasNamedVotes = !poll.is_anonymous && (poll.votes?.length ?? 0) > 0
+  const busy = refreshing || closing || exporting
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -35,6 +37,22 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
       setError(err instanceof Error ? err.message : t('poll.refreshFailed'))
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  async function handleClose() {
+    if (!confirm(t('poll.confirmClose'))) return
+    setClosing(true)
+    setError(null)
+    setHint(null)
+    try {
+      const res = await api.closePoll(poll.id)
+      setPoll(res.poll)
+      setHint(t('poll.closedOk'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('poll.closeFailed'))
+    } finally {
+      setClosing(false)
     }
   }
 
@@ -97,21 +115,32 @@ export function PollCard({ poll: initial }: { poll: MessagePoll }) {
         <button
           type="button"
           className="secondary"
-          disabled={refreshing}
+          disabled={busy}
           onClick={() => void handleRefresh()}
         >
           {refreshing ? t('chats.refreshing') : t('poll.refreshVotes')}
         </button>
+        {!poll.is_closed && (
+          <button
+            type="button"
+            className="danger"
+            disabled={busy}
+            onClick={() => void handleClose()}
+          >
+            {closing ? t('poll.closing') : t('poll.close')}
+          </button>
+        )}
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value as ExportFormat)}
           aria-label={t('poll.exportFormat')}
+          disabled={busy}
         >
           <option value="xlsx">Excel</option>
           <option value="ods">ODS</option>
           <option value="csv">CSV</option>
         </select>
-        <button type="button" disabled={exporting} onClick={() => void handleExport()}>
+        <button type="button" disabled={busy} onClick={() => void handleExport()}>
           {exporting ? t('analytics.exporting') : t('poll.exportVotes')}
         </button>
       </div>

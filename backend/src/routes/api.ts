@@ -16,6 +16,7 @@ import {
   getWebhookInfo,
   sendMessage,
   setWebhook,
+  stopPoll,
 } from '../telegram/api'
 import {
   acceptPendingMembershipId,
@@ -806,6 +807,118 @@ apiRoutes.post('/polls/:pollId/refresh', async (c) => {
       is_anonymous: freshPoll.is_anonymous,
       allows_multiple_answers: freshPoll.allows_multiple_answers,
       type: freshPoll.type,
+      votes,
+    },
+  })
+})
+
+/**
+ * Close a poll on Telegram via stopPoll (bot-sent polls only), then persist the final state.
+ */
+apiRoutes.post('/polls/:pollId/close', async (c) => {
+  const pollId = c.req.param('pollId')
+  if (!c.env.TELEGRAM_BOT_TOKEN) {
+    return c.json({ error: 'TELEGRAM_BOT_TOKEN is not configured' }, 500)
+  }
+
+  const pollRow = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT poll_id, chat_id, message_db_id, telegram_message_id, poll_json, is_closed
+     FROM polls WHERE poll_id = ?`,
+  )
+    .bind(pollId)
+    .first<{
+      poll_id: string
+      chat_id: string
+      message_db_id: string | null
+      telegram_message_id: string | null
+      poll_json: string
+      is_closed: number
+    }>()
+
+  if (!pollRow) {
+    return c.json({ error: 'Poll not found' }, 404)
+  }
+  if (!pollRow.telegram_message_id) {
+    return c.json({ error: 'Poll is not linked to a Telegram message' }, 400)
+  }
+  if (pollRow.is_closed) {
+    return c.json({ error: 'Poll is already closed' }, 400)
+  }
+
+  const stopped = await stopPoll(c.env.TELEGRAM_BOT_TOKEN, {
+    chat_id: pollRow.chat_id,
+    message_id: Number(pollRow.telegram_message_id),
+  })
+
+  if (!stopped.ok || !stopped.result) {
+    return c.json(
+      {
+        error:
+          stopped.description ??
+          'Could not close poll on Telegram (it must have been sent by this bot)',
+      },
+      502,
+    )
+  }
+
+  const closedPoll = stopped.result
+  await upsertPoll(c.env.TELEGRAM_MESSAGES_DB, closedPoll, {
+    chatId: pollRow.chat_id,
+    messageDbId: pollRow.message_db_id,
+    telegramMessageId: pollRow.telegram_message_id,
+  })
+  await applyPollUpdateToMessage(c.env.TELEGRAM_MESSAGES_DB, closedPoll)
+
+  const voteRows = await c.env.TELEGRAM_MESSAGES_DB.prepare(
+    `SELECT user_id, option_ids, updated_at FROM poll_votes WHERE poll_id = ? ORDER BY updated_at ASC`,
+  )
+    .bind(pollId)
+    .all<{ user_id: string; option_ids: string; updated_at: string }>()
+
+  const userIds = [...new Set((voteRows.results ?? []).map((v) => v.user_id))]
+  const membersById: Record<string, MemberRow> = {}
+  if (userIds.length > 0) {
+    const placeholders = userIds.map(() => '?').join(',')
+    const members = await c.env.MAIN_DB.prepare(
+      `SELECT * FROM members WHERE telegram_user_id IN (${placeholders})`,
+    )
+      .bind(...userIds)
+      .all<MemberRow>()
+    for (const m of members.results ?? []) {
+      membersById[m.telegram_user_id] = m
+    }
+  }
+
+  const votes = (voteRows.results ?? []).map((v) => {
+    let optionIds: number[] = []
+    try {
+      optionIds = JSON.parse(v.option_ids) as number[]
+    } catch {
+      optionIds = []
+    }
+    const member = membersById[v.user_id]
+    return {
+      user_id: v.user_id,
+      option_ids: optionIds,
+      option_texts: optionIds.map((i) => closedPoll.options[i]?.text ?? `Option ${i}`),
+      display_name: member?.display_name ?? v.user_id,
+      username: member?.username ?? null,
+      membership_id: member?.membership_id ?? null,
+      updated_at: v.updated_at,
+    }
+  })
+
+  return c.json({
+    ok: true,
+    poll: {
+      id: closedPoll.id,
+      question: closedPoll.question,
+      options: closedPoll.options,
+      total_voter_count: closedPoll.total_voter_count,
+      is_closed: closedPoll.is_closed,
+      is_anonymous: closedPoll.is_anonymous,
+      allows_multiple_answers: closedPoll.allows_multiple_answers,
+      type: closedPoll.type,
       votes,
     },
   })

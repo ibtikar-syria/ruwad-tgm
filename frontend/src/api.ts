@@ -244,6 +244,11 @@ export const api = {
       `/api/polls/${encodeURIComponent(pollId)}/refresh`,
       { method: 'POST' },
     ),
+  closePoll: (pollId: string) =>
+    request<{ ok: boolean; poll: MessagePoll }>(
+      `/api/polls/${encodeURIComponent(pollId)}/close`,
+      { method: 'POST' },
+    ),
   webhookInfo: () =>
     request<{
       webhook: {
