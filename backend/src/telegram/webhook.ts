@@ -121,18 +121,31 @@ async function replyWithInfo(env: CloudflareBindings, message: TelegramMessage):
   if (!env.TELEGRAM_BOT_TOKEN) return
 
   let savedName: string | null = null
+  let membershipId: string | null = null
+  let pendingMembershipId: string | null = null
   if (message.from && !message.from.is_bot) {
     const row = await env.MAIN_DB.prepare(
-      `SELECT custom_name FROM members WHERE telegram_user_id = ?`,
+      `SELECT custom_name, membership_id, pending_membership_id
+       FROM members WHERE telegram_user_id = ?`,
     )
       .bind(String(message.from.id))
-      .first<{ custom_name: string | null }>()
+      .first<{
+        custom_name: string | null
+        membership_id: string | null
+        pending_membership_id: string | null
+      }>()
     savedName = row?.custom_name ?? null
+    membershipId = row?.membership_id ?? null
+    pendingMembershipId = row?.pending_membership_id ?? null
   }
 
   const result = await sendAndStoreBotMessage(env, {
     chat_id: message.chat.id,
-    text: formatInfoMessageHtml(message, { savedName }),
+    text: formatInfoMessageHtml(message, {
+      savedName,
+      membershipId,
+      pendingMembershipId,
+    }),
     parse_mode: 'HTML',
     reply_to_message_id: message.message_id,
     ...(typeof message.message_thread_id === 'number'

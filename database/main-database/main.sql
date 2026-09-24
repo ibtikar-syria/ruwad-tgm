@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
     telegram_user_id TEXT NOT NULL UNIQUE,
     membership_id TEXT,
+    -- Filled by the user via the bot; admin must approve before it becomes membership_id
+    pending_membership_id TEXT,
     custom_name TEXT,
     display_name TEXT,
     username TEXT,

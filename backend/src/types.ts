@@ -35,6 +35,7 @@ export type MemberRow = {
   id: string
   telegram_user_id: string
   membership_id: string | null
+  pending_membership_id: string | null
   custom_name: string | null
   display_name: string | null
   username: string | null

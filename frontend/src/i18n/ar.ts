@@ -129,6 +129,12 @@ export const ar: Record<keyof typeof en, string> = {
   'poll.hint':
     'التحديث يجلب نتائج الخيارات الحالية من تيليجرام. لا تظهر أسماء المصوّتين إلا في الاستطلاعات العلنية المنشأة بالأمر /poll.',
   'poll.refreshVotes': 'تحديث الأصوات',
+  'poll.close': 'إغلاق الاستطلاع',
+  'poll.closing': 'جارٍ الإغلاق…',
+  'poll.confirmClose':
+    'إغلاق هذا الاستطلاع على تيليجرام؟ لن يتمكن أحد من التصويت بعد ذلك. لا يمكن التراجع عن هذا الإجراء.',
+  'poll.closedOk': 'تم إغلاق الاستطلاع على تيليجرام.',
+  'poll.closeFailed': 'فشل إغلاق الاستطلاع',
   'poll.exportVotes': 'تصدير الأصوات',
   'poll.exportFormat': 'صيغة التصدير',
 
@@ -183,14 +189,24 @@ export const ar: Record<keyof typeof en, string> = {
   'telegram.loading': 'جارٍ تحميل حالة الويب هوك…',
 
   'members.heading': 'الأعضاء',
-  'members.descLead': 'عيّن رقم عضوية واسمًا مخصصًا اختياريًا لكل مستخدم على تيليجرام.',
+  'members.descLead':
+    'عيّن رقم عضوية واسمًا مخصصًا اختياريًا لكل مستخدم على تيليجرام. أرقام العضوية المرسلة عبر البوت تبقى قيد المراجعة حتى تقبلها هنا.',
   'members.descBulk': 'لتعبئتها دفعة واحدة، استخدم',
   'members.total': '{count} إجمالًا',
-  'members.searchPlaceholder': 'الاسم أو @اسم المستخدم أو معرّف تيليجرام أو رقم العضوية أو الاسم المخصص…',
+  'members.pendingTotal': '{count} قيد المراجعة',
+  'members.searchPlaceholder':
+    'الاسم أو @اسم المستخدم أو معرّف تيليجرام أو رقم العضوية أو الرقم قيد المراجعة أو الاسم المخصص…',
   'members.emptyNone': 'لا يوجد أعضاء بعد. يظهرون عندما يراسل الأشخاص في المجموعات المتابَعة.',
   'members.emptySearch': 'لا يوجد أعضاء مطابقون لبحثك.',
   'members.customNamePlaceholder': 'مثال: أحمد الحداد',
   'members.membershipIdPlaceholder': 'مثال: EMP-001',
+  'members.pendingLabel': 'قيد المراجعة من البوت',
+  'members.acceptPending': 'قبول',
+  'members.rejectPending': 'رفض',
+  'members.pendingAccepted': 'تم قبول رقم العضوية قيد المراجعة.',
+  'members.pendingRejected': 'تم رفض رقم العضوية قيد المراجعة.',
+  'members.pendingAcceptFailed': 'تعذّر قبول رقم العضوية قيد المراجعة',
+  'members.pendingRejectFailed': 'تعذّر رفض رقم العضوية قيد المراجعة',
   'members.saved': 'تم حفظ العضو.',
   'members.saveFailed': 'فشل الحفظ',
   'members.loadFailed': 'تعذّر تحميل الأعضاء',

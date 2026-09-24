@@ -1513,6 +1513,51 @@ th {
   min-width: 140px;
 }
 
+.membership-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.pending-membership {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px dashed var(--accent-border);
+  background: var(--accent-faint);
+}
+
+.pending-membership-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.pending-membership-label code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+}
+
+.pending-membership-actions {
+  gap: 0.35rem;
+}
+
+.pending-membership-actions button {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.status-chip.status-pending {
+  color: var(--warning-text, #8a5a00);
+  background: var(--warning-soft, rgba(255, 193, 7, 0.16));
+  border-color: var(--warning-border, rgba(255, 193, 7, 0.45));
+}
+
+.row-pending td {
+  background: color-mix(in srgb, var(--accent-faint) 70%, transparent);
+}
+
 .actions-cell {
   width: 1%;
   white-space: nowrap;

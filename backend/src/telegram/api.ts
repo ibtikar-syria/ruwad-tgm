@@ -112,6 +112,20 @@ export async function sendPoll(
   })
 }
 
+/** Stops a poll previously sent by the bot. Returns the final Poll. */
+export async function stopPoll(
+  botToken: string,
+  params: {
+    chat_id: number | string
+    message_id: number
+  },
+): Promise<TelegramApiResponse<import('./types').TelegramPoll>> {
+  return callTelegramApi(botToken, 'stopPoll', {
+    chat_id: params.chat_id,
+    message_id: params.message_id,
+  })
+}
+
 /** Returns the sent Message — for polls this includes current voter counts. */
 export async function forwardMessage(
   botToken: string,
